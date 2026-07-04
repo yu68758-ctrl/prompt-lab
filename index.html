@@ -87,7 +87,7 @@ h1{font-size:20px;font-weight:600;color:#fff;margin-bottom:4px}
 </div>
 <div>
 <label>Model</label>
-<input id="apiModel" value="xiaomi/mimo-v2.5-pro" placeholder="model-name">
+<input id="apiModel" value="mimo-v2.5" placeholder="model-name">
 </div>
 <div style="grid-column:1/-1">
 <label>API Key</label>
@@ -337,7 +337,16 @@ async function callAPI(messages) {
   } catch (err) { toast('API 调用失败: ' + err.message); return null; }
 }
 
-function buildMessages(goalOverride, sectionHint) {
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result); // data:image/...;base64,...
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function buildMessages(goalOverride, sectionHint) {
   const goal = goalOverride || $('#userGoal').value || '氛围感海报';
   const posterType = $('#posterType').value;
   const sizeNeed = $('#sizeNeed').value;
@@ -348,9 +357,10 @@ function buildMessages(goalOverride, sectionHint) {
   if (sectionHint) userText += `\n\n请重点重新生成以下部分：${sectionHint}`;
 
   const content = [{ type: 'text', text: userText }];
-  uploadedFiles.forEach(f => {
-    content.push({ type: 'image_url', image_url: { url: URL.createObjectURL(f) } });
-  });
+  for (const f of uploadedFiles) {
+    const dataUrl = await readFileAsBase64(f);
+    content.push({ type: 'image_url', image_url: { url: dataUrl } });
+  }
 
   return [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -363,7 +373,7 @@ async function generate(goalOverride, sectionHint) {
   results.classList.remove('show');
   genBtn.disabled = true;
 
-  const messages = buildMessages(goalOverride, sectionHint);
+  const messages = await buildMessages(goalOverride, sectionHint);
   const raw = await callAPI(messages);
 
   loading.classList.remove('show');
