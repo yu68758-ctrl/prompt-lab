@@ -179,6 +179,17 @@ h1{font-size:20px;font-weight:600;color:#fff;margin-bottom:4px}
 
 <div class="section">
 <div class="section-header">
+<span class="section-title">🔤 文字视觉解析</span>
+<div class="section-actions">
+<button class="btn-sm" onclick="regen('typo')">重新生成</button>
+</div>
+</div>
+<div class="section-loading" id="loadTypo"><div class="spinner"></div>正在生成...</div>
+<div class="section-content" id="outTypo" tabindex="0"></div>
+</div>
+
+<div class="section">
+<div class="section-header">
 <span class="section-title">✨ 横版 A4 Prompt</span>
 <div class="section-actions">
 <button class="btn-sm" onclick="regen('a4')">重新生成</button>
@@ -400,9 +411,10 @@ genBtn.addEventListener('click', () => generate());
 function parseAndDisplay(raw) {
   const sections = {
     type: extractSection(raw, '海报类型判断', '视觉分析'),
-    visual: extractSection(raw, '视觉分析', '文案容量判断'),
-    copy: extractSection(raw, '文案容量判断', '生成策略'),
-    a4: extractSection(raw, '横版 A4 Prompt', '16:9'),
+    visual: extractSection(raw, '视觉分析', '文字视觉解析'),
+    typo: extractSection(raw, '文字视觉解析', '文案容量判断'),
+    copy: extractSection(raw, '文案容量判断', '流程路由'),
+    a4: extractSection(raw, '横版 A4', '16:9'),
     '169': extractSection(raw, '16:9', '风格 Prompt'),
     style: extractSection(raw, '风格 Prompt', '负面 Prompt'),
     neg: extractSection(raw, '负面 Prompt', null)
@@ -410,6 +422,7 @@ function parseAndDisplay(raw) {
 
   $('#outType').textContent = sections.type || '（未提取到）';
   $('#outVisual').textContent = sections.visual || '（未提取到）';
+  $('#outTypo').textContent = sections.typo || '（未提取到）';
   $('#outCopy').textContent = sections.copy || '（未提取到）';
   $('#outA4').textContent = sections.a4 || '（未提取到）';
   $('#out169').textContent = sections['169'] || '（未提取到）';
@@ -428,6 +441,7 @@ const SECTION_SYS = {
   type: `你是海报创意分析专家。只输出"海报类型判断"分析。\n\n输出格式：\n## 海报类型判断\n- 推荐类型：\n- 信息密度：\n- 适合场景：\n- 判断理由：`,
   copy: `你是海报文案容量分析专家。只输出"文案容量判断"。\n\n输出格式：\n## 文案容量判断\n- 文案长度等级：\n- 建议文字占比：\n- 参考图承载能力：\n- 匹配结果：\n- 风险提示：`,
   visual: `你是海报视觉分析专家。只输出"视觉分析"。\n\n输出格式：\n## 视觉分析\n- 构图：\n- 主视觉：\n- 色彩与光影：\n- 材质与风格：\n- 装饰元素：\n- 创意亮点：`,
+  typo: `你是字体与排版分析专家。根据参考图分析其文字视觉风格。\n\n输出格式：\n## 文字视觉解析\n- 是否有明显标题：\n- 标题字体类别（如现代无衬线/粗体压缩/圆角亲和/手写感/装饰体等）：\n- 标题字重与层级：\n- 标题颜色与特效（描边/阴影/发光/渐变/色块承托等）：\n- 副标题/正文风格：\n- 文字区域位置（上左/居中/下部/分栏等）：\n- 文字占比估计：\n- 文字与主视觉关系（避让/叠加/穿插/分区）：\n- 可读性承托方式：\n- 给第三步的文字视觉建议：\n\n只输出文字视觉分析，不要输出画面内容分析。`,
   a4: `你是生图prompt专家。根据参考图和需求，只输出横版A4的英文prompt。\n\n只输出一段纯英文prompt，描述画面条件（构图、主视觉、色彩、光影、材质、留白区），适配297:210比例。\n不要输出中文分析，不要输出其他prompt。`,
   '169': `你是生图prompt专家。根据参考图和需求，只输出16:9投屏的英文prompt。\n\n只输出一段纯英文prompt，描述画面条件（构图、主视觉、色彩、光影、材质、留白区），适配16:9比例，横向延展更强。\n不要输出中文分析，不要输出其他prompt。`,
   style: `你是生图prompt专家。根据参考图和需求，只输出风格关键词。\n\n只输出一段纯英文的风格prompt，包含风格类型、质感、光线、色调等关键词。\n不要输出中文分析。`,
@@ -438,6 +452,7 @@ const SECTION_MAP = {
   type: { el: 'outType', load: 'loadType' },
   copy: { el: 'outCopy', load: 'loadCopy' },
   visual: { el: 'outVisual', load: 'loadVisual' },
+  typo: { el: 'outTypo', load: 'loadTypo' },
   a4: { el: 'outA4', load: 'loadA4' },
   '169': { el: 'out169', load: 'load169' },
   style: { el: 'outStyle', load: 'loadStyle' },
