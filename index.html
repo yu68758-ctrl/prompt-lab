@@ -49,6 +49,9 @@ h1{font-size:20px;font-weight:600;color:#fff;margin-bottom:4px}
 .spinner{width:32px;height:32px;border:3px solid #333;border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;margin:0 auto 12px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .loading p{color:#888;font-size:13px}
+.section-loading{display:none;text-align:center;padding:20px;font-size:13px;color:#888}
+.section-loading.show{display:block}
+.section-loading .spinner{width:20px;height:20px;border-width:2px;margin:0 auto 8px}
 
 /* Results */
 .results{display:none}
@@ -148,6 +151,7 @@ h1{font-size:20px;font-weight:600;color:#fff;margin-bottom:4px}
 <button class="btn-sm" onclick="regen('type')">重新生成</button>
 </div>
 </div>
+<div class="section-loading" id="loadType"><div class="spinner"></div>正在生成...</div>
 <div class="section-content" id="outType" tabindex="0"></div>
 </div>
 
@@ -158,6 +162,7 @@ h1{font-size:20px;font-weight:600;color:#fff;margin-bottom:4px}
 <button class="btn-sm" onclick="regen('copy')">重新生成</button>
 </div>
 </div>
+<div class="section-loading" id="loadCopy"><div class="spinner"></div>正在生成...</div>
 <div class="section-content" id="outCopy" tabindex="0"></div>
 </div>
 
@@ -168,6 +173,7 @@ h1{font-size:20px;font-weight:600;color:#fff;margin-bottom:4px}
 <button class="btn-sm" onclick="regen('visual')">重新生成</button>
 </div>
 </div>
+<div class="section-loading" id="loadVisual"><div class="spinner"></div>正在生成...</div>
 <div class="section-content" id="outVisual" tabindex="0"></div>
 </div>
 
@@ -179,6 +185,7 @@ h1{font-size:20px;font-weight:600;color:#fff;margin-bottom:4px}
 <button class="btn-sm" onclick="copySection('a4')">复制</button>
 </div>
 </div>
+<div class="section-loading" id="loadA4"><div class="spinner"></div>正在生成...</div>
 <div class="section-content" id="outA4" tabindex="0"></div>
 </div>
 
@@ -190,6 +197,7 @@ h1{font-size:20px;font-weight:600;color:#fff;margin-bottom:4px}
 <button class="btn-sm" onclick="copySection('169')">复制</button>
 </div>
 </div>
+<div class="section-loading" id="load169"><div class="spinner"></div>正在生成...</div>
 <div class="section-content" id="out169" tabindex="0"></div>
 </div>
 
@@ -201,6 +209,7 @@ h1{font-size:20px;font-weight:600;color:#fff;margin-bottom:4px}
 <button class="btn-sm" onclick="copySection('style')">复制</button>
 </div>
 </div>
+<div class="section-loading" id="loadStyle"><div class="spinner"></div>正在生成...</div>
 <div class="section-content" id="outStyle" tabindex="0"></div>
 </div>
 
@@ -212,6 +221,7 @@ h1{font-size:20px;font-weight:600;color:#fff;margin-bottom:4px}
 <button class="btn-sm" onclick="copySection('neg')">复制</button>
 </div>
 </div>
+<div class="section-loading" id="loadNeg"><div class="spinner"></div>正在生成...</div>
 <div class="section-content" id="outNeg" tabindex="0"></div>
 </div>
 
@@ -414,17 +424,62 @@ function extractSection(text, start, end) {
   return m ? m[1].trim() : '';
 }
 
+const SECTION_SYS = {
+  type: `你是海报创意分析专家。只输出"海报类型判断"分析。\n\n输出格式：\n## 海报类型判断\n- 推荐类型：\n- 信息密度：\n- 适合场景：\n- 判断理由：`,
+  copy: `你是海报文案容量分析专家。只输出"文案容量判断"。\n\n输出格式：\n## 文案容量判断\n- 文案长度等级：\n- 建议文字占比：\n- 参考图承载能力：\n- 匹配结果：\n- 风险提示：`,
+  visual: `你是海报视觉分析专家。只输出"视觉分析"。\n\n输出格式：\n## 视觉分析\n- 构图：\n- 主视觉：\n- 色彩与光影：\n- 材质与风格：\n- 装饰元素：\n- 创意亮点：`,
+  a4: `你是生图prompt专家。根据参考图和需求，只输出横版A4的英文prompt。\n\n只输出一段纯英文prompt，描述画面条件（构图、主视觉、色彩、光影、材质、留白区），适配297:210比例。\n不要输出中文分析，不要输出其他prompt。`,
+  '169': `你是生图prompt专家。根据参考图和需求，只输出16:9投屏的英文prompt。\n\n只输出一段纯英文prompt，描述画面条件（构图、主视觉、色彩、光影、材质、留白区），适配16:9比例，横向延展更强。\n不要输出中文分析，不要输出其他prompt。`,
+  style: `你是生图prompt专家。根据参考图和需求，只输出风格关键词。\n\n只输出一段纯英文的风格prompt，包含风格类型、质感、光线、色调等关键词。\n不要输出中文分析。`,
+  neg: `你是生图prompt专家。根据参考图和需求，只输出负面prompt。\n\n只输出一段纯英文的负面prompt，排除不需要的元素（如文字、水印、logo等）。\n不要输出中文分析。`
+};
+
+const SECTION_MAP = {
+  type: { el: 'outType', load: 'loadType' },
+  copy: { el: 'outCopy', load: 'loadCopy' },
+  visual: { el: 'outVisual', load: 'loadVisual' },
+  a4: { el: 'outA4', load: 'loadA4' },
+  '169': { el: 'out169', load: 'load169' },
+  style: { el: 'outStyle', load: 'loadStyle' },
+  neg: { el: 'outNeg', load: 'loadNeg' }
+};
+
 async function regen(section) {
-  const hintMap = {
-    type: '海报类型判断',
-    copy: '文案容量分析',
-    visual: '视觉分析',
-    a4: '横版 A4 Prompt',
-    '169': '16:9 投屏 Prompt',
-    style: '风格 Prompt',
-    neg: '负面 Prompt'
-  };
-  await generate(null, `只重新生成：${hintMap[section]}`);
+  const info = SECTION_MAP[section];
+  if (!info) return;
+  const loadEl = document.getElementById(info.load);
+  const outEl = document.getElementById(info.el);
+  loadEl.classList.add('show');
+  outEl.style.opacity = '0.3';
+
+  const goal = $('#userGoal').value || '氛围感海报';
+  const posterType = $('#posterType').value;
+  const sizeNeed = $('#sizeNeed').value;
+  const typeMap = { atmosphere_screen:'氛围感投屏', weekly_broadcast:'每周播报', interactive_topic:'互动话题', other:'其他' };
+  const sizeMap = { both:'需要横版 A4 和 16:9 两个尺寸', a4:'仅需横版 A4', '169':'仅需 16:9' };
+
+  let userText = `海报类型：${typeMap[posterType]}\n尺寸需求：${sizeMap[sizeNeed]}\n需求：${goal}`;
+
+  const content = [{ type: 'text', text: userText }];
+  for (const f of uploadedFiles) {
+    const dataUrl = await readFileAsBase64(f);
+    content.push({ type: 'image_url', image_url: { url: dataUrl } });
+  }
+
+  const messages = [
+    { role: 'system', content: SECTION_SYS[section] },
+    { role: 'user', content }
+  ];
+
+  const raw = await callAPI(messages);
+  loadEl.classList.remove('show');
+  outEl.style.opacity = '1';
+  if (!raw) return;
+
+  // Extract content after heading if present
+  const cleaned = raw.replace(/^##\s*[^\n]*\n/, '').trim();
+  outEl.textContent = cleaned || raw;
+  toast('已重新生成');
 }
 
 function copySection(section) {
