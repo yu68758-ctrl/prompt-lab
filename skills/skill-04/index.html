@@ -3,21 +3,617 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>生图执行 — Prompt Lab — Prompt Lab</title>
+<title>生图执行 — Prompt Lab</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        dark: { 900:'#0a0a12', 800:'#0d0d18', 700:'#12121c', 600:'#1a1a2e', 500:'#2a2a3e' },
+      }
+    }
+  }
+};
+</script>
+<link rel="stylesheet" href="../../style.css">
+<script src="../../shared/config.js"></script>
+<script src="../../shared/store.js"></script>
+<script src="../../shared/api.js"></script>
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#0a0a14; color:#e0e0e0; min-height:100vh; display:flex; align-items:center; justify-content:center; }
-.placeholder { text-align:center; }
-.placeholder .icon { font-size:48px; margin-bottom:16px; }
-.placeholder h2 { font-size:18px; font-weight:600; margin-bottom:8px; }
-.placeholder p { font-size:13px; color:#666; }
+body { background:#0a0a12; color:#e0e0e8; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; margin:0; }
+.gen-card { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:12px; backdrop-filter:blur(12px); }
+.gen-card:hover { box-shadow:0 4px 16px rgba(236,72,153,0.08); }
+.btn-pink { background:linear-gradient(135deg,#ec4899 0%,#f472b6 100%); color:white; padding:10px 24px; border-radius:10px; font-weight:600; font-size:13px; transition:all .2s; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.btn-pink:hover { background:linear-gradient(135deg,#db2777 0%,#ec4899 100%); transform:translateY(-1px); box-shadow:0 4px 16px rgba(236,72,153,0.4); }
+.btn-pink:disabled { opacity:0.4; cursor:not-allowed; transform:none; box-shadow:none; }
+.btn-secondary-pink { background:rgba(236,72,153,0.1); color:#ec4899; padding:10px 24px; border-radius:10px; font-weight:600; font-size:13px; transition:all .2s; border:1px solid rgba(236,72,153,0.25); cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.btn-secondary-pink:hover { background:rgba(236,72,153,0.2); transform:translateY(-1px); }
+.btn-secondary-pink:disabled { opacity:0.4; cursor:not-allowed; transform:none; }
+.mode-toggle { display:inline-flex; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; overflow:hidden; }
+.mode-btn { padding:8px 20px; font-size:13px; font-weight:500; cursor:pointer; transition:all .2s; border:none; background:transparent; color:#888; }
+.mode-btn.active { background:rgba(236,72,153,0.15); color:#ec4899; }
+.mode-btn:hover:not(.active) { background:rgba(255,255,255,0.04); color:#bbb; }
+.param-select { background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.08); border-radius:8px; padding:8px 12px; color:#e0e0e8; font-size:13px; cursor:pointer; -webkit-appearance:none; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; padding-right:30px; }
+.param-select:focus { outline:none; border-color:rgba(236,72,153,0.5); }
+.param-select option { background:#1a1a2e; color:#e0e0e8; }
+.qty-btn { width:34px; height:34px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); background:rgba(0,0,0,0.3); color:#aaa; font-size:14px; font-weight:600; cursor:pointer; transition:all .15s; display:flex; align-items:center; justify-content:center; }
+.qty-btn.active { border-color:rgba(236,72,153,0.5); color:#ec4899; background:rgba(236,72,153,0.08); }
+.qty-btn:hover:not(.active) { border-color:rgba(255,255,255,0.15); color:#ddd; }
+.img-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; }
+.img-result { position:relative; border-radius:10px; overflow:hidden; border:2px solid transparent; transition:border-color .2s; cursor:pointer; aspect-ratio:auto; }
+.img-result.selected { border-color:#ec4899; box-shadow:0 0 0 2px rgba(236,72,153,0.3); }
+.img-result img { width:100%; display:block; border-radius:8px; }
+.img-overlay { position:absolute; inset:0; background:rgba(0,0,0,0.5); opacity:0; transition:opacity .2s; display:flex; align-items:center; justify-content:center; gap:8px; }
+.img-result:hover .img-overlay { opacity:1; }
+.img-act-btn { background:rgba(255,255,255,0.15); backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.2); color:white; border-radius:8px; padding:6px 14px; font-size:12px; font-weight:500; cursor:pointer; transition:background .15s; }
+.img-act-btn:hover { background:rgba(255,255,255,0.25); }
+.img-act-btn.select-btn { background:rgba(236,72,153,0.6); border-color:rgba(236,72,153,0.4); }
+.img-act-btn.select-btn:hover { background:rgba(236,72,153,0.8); }
+.selected-badge { position:absolute; top:8px; right:8px; background:#ec4899; color:white; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; box-shadow:0 2px 8px rgba(236,72,153,0.4); }
+.ref-upload { border:2px dashed rgba(236,72,153,0.25); border-radius:12px; padding:28px 20px; text-align:center; cursor:pointer; transition:all .25s; background:rgba(236,72,153,0.02); }
+.ref-upload:hover,.ref-upload.dragover { border-color:rgba(236,72,153,0.5); background:rgba(236,72,153,0.06); }
+.ref-upload.has-image { border-style:solid; border-color:rgba(34,197,94,0.4); background:rgba(34,197,94,0.04); }
+.progress-bar { height:4px; background:rgba(255,255,255,0.06); border-radius:2px; overflow:hidden; }
+.progress-fill { height:100%; background:linear-gradient(90deg,#ec4899,#f472b6); border-radius:2px; transition:width .3s; }
+.section-panel { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); border-radius:10px; padding:16px; }
+.prompt-preview { font-size:12px; color:#888; line-height:1.7; white-space:pre-wrap; font-family:'SF Mono','Fira Code','Consolas',monospace; background:rgba(0,0,0,0.2); border-radius:8px; padding:10px; max-height:120px; overflow-y:auto; }
+.preview-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:10000; display:flex; align-items:center; justify-content:center; cursor:zoom-out; }
+.preview-overlay img { max-width:90vw; max-height:90vh; object-fit:contain; border-radius:8px; }
+.toast-wrap { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:99999; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none; }
+.toast-item { padding:10px 20px; border-radius:8px; font-size:13px; font-weight:500; color:#fff; box-shadow:0 4px 12px rgba(0,0,0,.3); pointer-events:none; opacity:0; animation:toastIn .3s ease forwards; }
+.toast-item.success { background:rgba(34,197,94,0.9); }
+.toast-item.error { background:rgba(239,68,68,0.9); }
+.toast-item.info { background:rgba(99,102,241,0.9); }
+@keyframes toastIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+@keyframes toastOut { from { opacity:1; } to { opacity:0; transform:translateY(-10px); } }
+@keyframes progressPulse { 0% { width:20%; } 50% { width:80%; } 100% { width:20%; } }
 </style>
 </head>
 <body>
-<div class="placeholder">
-  <div class="icon">🎨</div>
-  <h2>生图执行</h2>
-  <p>此 Skill 尚未开发，即将上线 🚀</p>
-</div>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+/* ─── Standalone detection ─── */
+const isStandalone = window.self === window.top;
+
+/* ─── Uses global PipelineStore and PipelineAPI from shared modules ─── */
+
+/* ─── Toast system (React-managed) ─── */
+let _toastId = 0;
+let _setToasts = null;
+
+function showToast(msg, type = 'info') {
+  const id = ++_toastId;
+  if (_setToasts) {
+    _setToasts(prev => [...prev, { id, msg, type }]);
+    setTimeout(() => {
+      _setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
+  }
+}
+
+function ToastContainer({ toasts }) {
+  return (
+    <div className="toast-wrap">
+      {toasts.map(t => (
+        <div key={t.id} className={`toast-item ${t.type}`}>{t.msg}</div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── Helper: file to base64 ─── */
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ─── Image Preview Modal ─── */
+function ImagePreviewModal({ src, onClose }) {
+  if (!src) return null;
+  return (
+    <div className="preview-overlay" onClick={onClose}>
+      <img src={src} alt="preview" />
+    </div>
+  );
+}
+
+/* ─── Progress indicator ─── */
+function GeneratingProgress({ text }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12">
+      <div className="spinner mb-4" style={{ width: 40, height: 40, borderColor: 'rgba(236,72,153,0.2)', borderTopColor: '#ec4899' }}></div>
+      <p className="text-sm text-gray-400 mb-3">{text || '正在生成图片...'}</p>
+      <div className="progress-bar w-64">
+        <div className="progress-fill" style={{ width: '60%', animation: 'progressPulse 2s ease-in-out infinite' }}></div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Main App ─── */
+function App() {
+  const [toasts, setToasts] = useState([]);
+  _setToasts = setToasts;
+
+  // Skill 03 input data
+  const [skill03Data, setSkill03Data] = useState(null);
+  const [hasSkill03, setHasSkill03] = useState(false);
+
+  // Generation mode
+  const [mode, setMode] = useState('txt2img'); // txt2img | img2img
+
+  // Parameters
+  const [size, setSize] = useState('1536x1024');
+  const [quality, setQuality] = useState('high');
+  const [count, setCount] = useState(1);
+
+  // Reference image (for img2img)
+  const [refFile, setRefFile] = useState(null);
+  const [refPreview, setRefPreview] = useState(null);
+  const refInputRef = useRef(null);
+
+  // Generation state
+  const [generating, setGenerating] = useState(false);
+  const [progressText, setProgressText] = useState('');
+  const [genImages, setGenImages] = useState([]);
+  const [titleImages, setTitleImages] = useState([]);
+
+  // Selected image
+  const [selectedIdx, setSelectedIdx] = useState(-1);
+  const [selectedTitleIdx, setSelectedTitleIdx] = useState(-1);
+
+  // Preview modal
+  const [previewSrc, setPreviewSrc] = useState(null);
+
+  // Load Skill 03 data on mount
+  useEffect(() => {
+    try {
+      const result = PipelineStore.getSkillOutput(3);
+      if (result && (result.mainPrompt || result.stylePrompt || result.titleDesignSupportAssets)) {
+        setSkill03Data(result);
+        setHasSkill03(true);
+      }
+    } catch (e) {
+      console.warn('Failed to load skill-03 data:', e);
+    }
+
+    // Restore any previously saved skill-04 output
+    try {
+      const saved = PipelineStore.getSkillOutput(4);
+      if (saved) {
+        if (saved.fullCanvas?.url) {
+          setGenImages([{ url: saved.fullCanvas.url, width: saved.fullCanvas.width, height: saved.fullCanvas.height, index: 0 }]);
+          setSelectedIdx(0);
+        }
+        if (saved.titleDesignSupport?.url) {
+          setTitleImages([{ url: saved.titleDesignSupport.url, index: 0 }]);
+          setSelectedTitleIdx(0);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to restore skill-04 data:', e);
+    }
+  }, []);
+
+  // Ref image handling
+  const handleRefUpload = useCallback((files) => {
+    const file = files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    setRefFile(file);
+    fileToBase64(file).then(b64 => setRefPreview(b64));
+  }, []);
+
+  const handleRefDrop = useCallback((e) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('dragover');
+    handleRefUpload(e.dataTransfer.files);
+  }, [handleRefUpload]);
+
+  const clearRef = useCallback(() => {
+    setRefFile(null);
+    setRefPreview(null);
+    if (refInputRef.current) refInputRef.current.value = '';
+  }, []);
+
+  // Build the combined prompt for the poster
+  function buildMainPrompt() {
+    if (!skill03Data) return '';
+    const parts = [];
+    if (skill03Data.mainPrompt) parts.push(skill03Data.mainPrompt);
+    if (skill03Data.stylePrompt) parts.push(skill03Data.stylePrompt);
+    if (skill03Data.negativePrompt) parts.push('Avoid: ' + skill03Data.negativePrompt);
+    return parts.join('\n\n');
+  }
+
+  // Build the title design support prompt
+  function buildTitlePrompt() {
+    if (!skill03Data) return '';
+    return skill03Data.titleDesignSupportAssets || '';
+  }
+
+  // Execute poster generation
+  const handleGenPoster = useCallback(async () => {
+    const prompt = buildMainPrompt();
+    if (!prompt) {
+      showToast('没有可用的 Prompt，请先完成 Step 3', 'error');
+      return;
+    }
+    if (mode === 'img2img' && !refFile) {
+      showToast('图生图模式需要上传参考图', 'error');
+      return;
+    }
+
+    setGenerating(true);
+    setProgressText(mode === 'txt2img' ? '文生图中，请稍候...' : '图生图中，请稍候...');
+
+    const opts = { size, quality, n: count };
+    let results = null;
+
+    if (mode === 'txt2img') {
+      results = await PipelineAPI.callImageGen(prompt, opts);
+    } else {
+      results = await PipelineAPI.callImageEdit(prompt, [refFile], opts);
+    }
+
+    setGenerating(false);
+
+    if (results && results.length > 0) {
+      setGenImages(results);
+      setSelectedIdx(0);
+      showToast(`成功生成 ${results.length} 张海报底图`, 'success');
+    }
+  }, [skill03Data, mode, refFile, size, quality, count]);
+
+  // Execute title support generation
+  const handleGenTitle = useCallback(async () => {
+    const prompt = buildTitlePrompt();
+    if (!prompt) {
+      showToast('没有标题设计支撑件 Prompt，请检查 Step 3 输出', 'error');
+      return;
+    }
+
+    setGenerating(true);
+    setProgressText('生成标题支撑件中，请稍候...');
+
+    const opts = { size, quality, n: count };
+    let results = null;
+
+    if (mode === 'txt2img' || !refFile) {
+      results = await PipelineAPI.callImageGen(prompt, opts);
+    } else {
+      results = await PipelineAPI.callImageEdit(prompt, [refFile], opts);
+    }
+
+    setGenerating(false);
+
+    if (results && results.length > 0) {
+      setTitleImages(results);
+      setSelectedTitleIdx(0);
+      showToast(`成功生成 ${results.length} 个标题支撑件`, 'success');
+    }
+  }, [skill03Data, mode, refFile, size, quality, count]);
+
+  // Download image
+  const handleDownload = useCallback((url, filename) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'skill04_image.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }, []);
+
+  // Save results
+  const handleSave = useCallback(() => {
+    const fullCanvasImg = selectedIdx >= 0 ? genImages[selectedIdx] : null;
+    const titleImg = selectedTitleIdx >= 0 ? titleImages[selectedTitleIdx] : null;
+
+    if (!fullCanvasImg && !titleImg) {
+      showToast('请至少选择一张图片', 'error');
+      return;
+    }
+
+    const data = { version: 1 };
+    if (fullCanvasImg) {
+      data.fullCanvas = { url: fullCanvasImg.url, width: fullCanvasImg.width, height: fullCanvasImg.height };
+    }
+    if (titleImg) {
+      data.titleDesignSupport = { url: titleImg.url };
+    }
+
+    PipelineStore.saveSkillOutput(4, data);
+    showToast('结果已保存', 'success');
+
+    try {
+      window.parent.postMessage({ type: 'skill-complete', skill: 4, data }, '*');
+    } catch (e) {
+      console.warn('postMessage failed:', e);
+    }
+  }, [genImages, titleImages, selectedIdx, selectedTitleIdx]);
+
+  // Re-generate (clear results and run again)
+  const handleRegenerate = useCallback(() => {
+    setGenImages([]);
+    setTitleImages([]);
+    setSelectedIdx(-1);
+    setSelectedTitleIdx(-1);
+    showToast('已清空结果，请重新生成', 'info');
+  }, []);
+
+  const hasSavedSelection = selectedIdx >= 0 || selectedTitleIdx >= 0;
+
+  /* ─── No Skill 03 data ─── */
+  if (!hasSkill03) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: '#0a0a12' }}>
+        {isStandalone && (
+          <div className="fixed top-0 left-0 right-0 z-50 px-6 py-3" style={{ background: 'rgba(10,10,18,0.9)', borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(12px)' }}>
+            <div className="max-w-5xl mx-auto flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-lg">🎨</span>
+                <span className="text-sm font-semibold text-white">Skill 04 — 生图执行</span>
+              </div>
+              <button className="btn-ghost text-xs" onClick={() => window.parent?.postMessage({type:'open-settings'}, '*')}>⚙️ 设置</button>
+            </div>
+          </div>
+        )}
+        <div className="gen-card p-8 text-center max-w-md">
+          <div className="text-5xl mb-4">🎨</div>
+          <h2 className="text-lg font-semibold text-white mb-2">生图执行</h2>
+          <p className="text-sm text-gray-500 mb-5">请先完成 Step 3 Prompt 构建，再回到此步骤生成图片。</p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs" style={{ background: 'rgba(245,158,11,0.1)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.2)' }}>
+            ⚠️ 缺少 Skill 03 输出数据
+          </div>
+        </div>
+        <ToastContainer toasts={toasts} />
+      </div>
+    );
+  }
+
+  /* ─── Main UI ─── */
+  return (
+    <div className="min-h-screen pb-8" style={{ background: '#0a0a12' }}>
+      {/* Header (standalone only) */}
+      {isStandalone && (
+        <div className="sticky top-0 z-50 px-6 py-3" style={{ background: 'rgba(10,10,18,0.9)', borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(12px)' }}>
+          <div className="max-w-5xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-lg">🎨</span>
+              <span className="text-sm font-semibold text-white">Skill 04 — 生图执行</span>
+            </div>
+            <button className="btn-ghost text-xs" onClick={() => PromptLabConfig.renderSettingsModal()}>⚙️ 设置</button>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-5xl mx-auto px-4 pt-6">
+        {/* ─── Section 1: Input Display ─── */}
+        <div className="section-panel mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-300">📋 Skill 03 输入</h3>
+            <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80' }}>已加载</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Main Prompt</label>
+              <div className="prompt-preview">{skill03Data?.mainPrompt || '（无）'}</div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Style Prompt</label>
+              <div className="prompt-preview">{skill03Data?.stylePrompt || '（无）'}</div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Negative Prompt</label>
+              <div className="prompt-preview">{skill03Data?.negativePrompt || '（无）'}</div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">标题设计支撑件 Prompt</label>
+              <div className="prompt-preview">{skill03Data?.titleDesignSupportAssets || '（无）'}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── Section 2: Mode & Parameters ─── */}
+        <div className="gen-card p-5 mb-4">
+          <div className="flex flex-wrap items-center gap-6 mb-5">
+            {/* Mode Toggle */}
+            <div>
+              <label className="text-xs text-gray-500 mb-2 block">生成模式</label>
+              <div className="mode-toggle">
+                <button className={`mode-btn ${mode === 'txt2img' ? 'active' : ''}`} onClick={() => setMode('txt2img')}>文生图</button>
+                <button className={`mode-btn ${mode === 'img2img' ? 'active' : ''}`} onClick={() => setMode('img2img')}>图生图</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Parameters */}
+          <div className="flex flex-wrap items-end gap-4 mb-5">
+            <div>
+              <label className="text-xs text-gray-500 mb-1.5 block">尺寸</label>
+              <select className="param-select" value={size} onChange={e => setSize(e.target.value)}>
+                <option value="1536x1024">1536x1024 (横版)</option>
+                <option value="1024x1536">1024x1536 (竖版)</option>
+                <option value="1024x1024">1024x1024 (方形)</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1.5 block">质量</label>
+              <select className="param-select" value={quality} onChange={e => setQuality(e.target.value)}>
+                <option value="high">high</option>
+                <option value="medium">medium</option>
+                <option value="low">low</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1.5 block">数量</label>
+              <div className="flex gap-1.5">
+                {[1,2,3,4].map(n => (
+                  <button key={n} className={`qty-btn ${count === n ? 'active' : ''}`} onClick={() => setCount(n)}>{n}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Reference image (img2img only) */}
+          {mode === 'img2img' && (
+            <div className="mb-5">
+              <label className="text-xs text-gray-500 mb-2 block">参考图（必填）</label>
+              {refPreview ? (
+                <div className="relative inline-block">
+                  <img src={refPreview} alt="ref" className="w-40 h-28 object-cover rounded-lg border border-white/10" />
+                  <button
+                    onClick={clearRef}
+                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white text-xs flex items-center justify-center hover:bg-red-400"
+                  >x</button>
+                </div>
+              ) : (
+                <div
+                  className="ref-upload"
+                  onClick={() => refInputRef.current?.click()}
+                  onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('dragover'); }}
+                  onDragLeave={e => e.currentTarget.classList.remove('dragover')}
+                  onDrop={handleRefDrop}
+                >
+                  <div className="text-2xl mb-1">📷</div>
+                  <p className="text-sm text-gray-500">点击或拖拽上传参考图</p>
+                </div>
+              )}
+              <input ref={refInputRef} type="file" accept="image/*" hidden onChange={e => handleRefUpload(e.target.files)} />
+            </div>
+          )}
+
+          {/* Combined prompt preview */}
+          <div className="mb-5">
+            <label className="text-xs text-gray-500 mb-1.5 block">组合 Prompt 预览</label>
+            <div className="prompt-preview" style={{ maxHeight: 100 }}>
+              {buildMainPrompt() || '（无可用 Prompt）'}
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-3">
+            <button className="btn-pink" disabled={generating || !buildMainPrompt()} onClick={handleGenPoster}>
+              {generating ? '生成中...' : '🎨 生成海报底图'}
+            </button>
+            <button
+              className="btn-secondary-pink"
+              disabled={generating || !buildTitlePrompt()}
+              onClick={handleGenTitle}
+            >
+              🎨 生成标题支撑件
+            </button>
+            {genImages.length > 0 && (
+              <button
+                className="btn-secondary-pink"
+                disabled={generating}
+                onClick={handleRegenerate}
+              >
+                🔄 重新生成
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ─── Section 3: Loading / Progress ─── */}
+        {generating && (
+          <div className="gen-card p-5 mb-4">
+            <GeneratingProgress text={progressText} />
+          </div>
+        )}
+
+        {/* ─── Section 4: Results Grid — Poster Images ─── */}
+        {genImages.length > 0 && !generating && (
+          <div className="gen-card p-5 mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-300">🖼️ 海报底图结果</h3>
+              <span className="text-xs text-gray-500">{genImages.length} 张图片</span>
+            </div>
+            <div className="img-grid">
+              {genImages.map((img, idx) => (
+                <div
+                  key={idx}
+                  className={`img-result ${selectedIdx === idx ? 'selected' : ''}`}
+                >
+                  <img src={img.url} alt={`poster-${idx}`} />
+                  {selectedIdx === idx && <div className="selected-badge">✓</div>}
+                  <div className="img-overlay">
+                    <button className="img-act-btn" onClick={(e) => { e.stopPropagation(); setPreviewSrc(img.url); }}>🔍 预览</button>
+                    <button className="img-act-btn" onClick={(e) => { e.stopPropagation(); handleDownload(img.url, `skill04_poster_${idx+1}.png`); }}>💾 下载</button>
+                    <button className="img-act-btn select-btn" onClick={(e) => { e.stopPropagation(); setSelectedIdx(idx); }}>选用此图</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ─── Section 5: Results Grid — Title Design Support ─── */}
+        {titleImages.length > 0 && !generating && (
+          <div className="gen-card p-5 mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-300">🔤 标题设计支撑件结果</h3>
+              <span className="text-xs text-gray-500">{titleImages.length} 张图片</span>
+            </div>
+            <div className="img-grid">
+              {titleImages.map((img, idx) => (
+                <div
+                  key={idx}
+                  className={`img-result ${selectedTitleIdx === idx ? 'selected' : ''}`}
+                >
+                  <img src={img.url} alt={`title-${idx}`} />
+                  {selectedTitleIdx === idx && <div className="selected-badge">✓</div>}
+                  <div className="img-overlay">
+                    <button className="img-act-btn" onClick={(e) => { e.stopPropagation(); setPreviewSrc(img.url); }}>🔍 预览</button>
+                    <button className="img-act-btn" onClick={(e) => { e.stopPropagation(); handleDownload(img.url, `skill04_title_${idx+1}.png`); }}>💾 下载</button>
+                    <button className="img-act-btn select-btn" onClick={(e) => { e.stopPropagation(); setSelectedTitleIdx(idx); }}>选用此图</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ─── Section 6: Save ─── */}
+        {(genImages.length > 0 || titleImages.length > 0) && !generating && (
+          <div className="gen-card p-5 mb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-300 mb-1">💾 保存结果</h3>
+                <p className="text-xs text-gray-500">
+                  {selectedIdx >= 0 ? `海报底图: 已选择 #${selectedIdx + 1}` : '海报底图: 未选择'}
+                  {' | '}
+                  {selectedTitleIdx >= 0 ? `标题支撑件: 已选择 #${selectedTitleIdx + 1}` : '标题支撑件: 未选择'}
+                </p>
+              </div>
+              <button className="btn-pink" disabled={!hasSavedSelection} onClick={handleSave}>
+                💾 保存结果
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Image Preview Overlay */}
+      <ImagePreviewModal src={previewSrc} onClose={() => setPreviewSrc(null)} />
+
+      {/* Toast notifications */}
+      <ToastContainer toasts={toasts} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
 </body>
 </html>

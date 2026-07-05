@@ -3,21 +3,414 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Prompt 构建 — Prompt Lab — Prompt Lab</title>
+<title>Prompt 构建 — Prompt Lab</title>
+<link rel="stylesheet" href="../../style.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        dark: { 900:'#0a0a12', 800:'#12121c', 700:'#1a1a28', 600:'#222236', 500:'#2a2a3e' },
+      }
+    }
+  }
+}
+</script>
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#0a0a14; color:#e0e0e0; min-height:100vh; display:flex; align-items:center; justify-content:center; }
-.placeholder { text-align:center; }
-.placeholder .icon { font-size:48px; margin-bottom:16px; }
-.placeholder h2 { font-size:18px; font-weight:600; margin-bottom:8px; }
-.placeholder p { font-size:13px; color:#666; }
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:#2a2a3e; border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:#3a3a52; }
+
+.spinner { width:28px; height:28px; border:3px solid rgba(59,130,246,0.2); border-top-color:#3b82f6; border-radius:50%; animation:spin .6s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+.toast-wrap { position:fixed; top:20px; right:20px; z-index:99999; display:flex; flex-direction:column; gap:8px; }
+.toast-item { padding:10px 18px; border-radius:10px; font-size:13px; font-weight:500; color:#fff; box-shadow:0 4px 16px rgba(0,0,0,.35); animation:toastIn .3s ease; max-width:340px; border:1px solid transparent; }
+.toast-item.success { background:rgba(16,185,129,.9); border-color:rgba(34,197,94,.3); }
+.toast-item.error   { background:rgba(239,68,68,.9);  border-color:rgba(239,68,68,.3); }
+.toast-item.info    { background:rgba(59,130,246,.9); border-color:rgba(59,130,246,.3); }
+@keyframes toastIn { from { transform:translateX(100%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+
+.prompt-textarea {
+  width:100%; background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.08);
+  border-radius:8px; padding:12px; color:#e0e0e8; font-size:13px;
+  font-family:'SF Mono','Fira Code','Consolas',monospace; line-height:1.6;
+  resize:vertical; transition:border-color .2s;
+}
+.prompt-textarea:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,.15); }
 </style>
 </head>
-<body>
-<div class="placeholder">
-  <div class="icon">🧩</div>
-  <h2>Prompt 构建</h2>
-  <p>此 Skill 尚未开发，即将上线 🚀</p>
-</div>
+<body class="dot-grid-bg">
+
+<div id="root"></div>
+
+<script src="../../shared/config.js"></script>
+<script src="../../shared/store.js"></script>
+<script src="../../shared/api.js"></script>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel" data-type="module">
+const { useState, useEffect, useCallback, useRef } = React;
+
+/* ── Constants ── */
+const isStandalone = window.self === window.top;
+
+const SYSTEM_PROMPT = `你是一个专业的生图 Prompt 构建专家。根据参考图分析和文案拆解结果，构建完整的生图 Prompt 组合。
+输出用 markdown 标题分隔：
+## 主 Prompt - 完整英文生图prompt（构图、主视觉、色彩、光影、材质、留白区，不要生成文字）
+## 负面 Prompt - 排除项
+## 风格 Prompt - 风格关键词
+## 标题支撑件 Prompt - 标题装饰元素prompt
+## 结构化数据 - 用 \`\`\`json 包裹 JSON
+\`\`\`json
+{
+  "mainPrompt": "英文主 prompt",
+  "negativePrompt": "英文负面 prompt",
+  "stylePrompt": "英文风格 prompt",
+  "titleDesignSupportAssets": "英文标题支撑件 prompt",
+  "titleText": "标题文字",
+  "titleStyleRef": "标题风格参考描述"
+}
+\`\`\`
+请严格按照以上格式输出，JSON 部分必须完整且可解析。`;
+
+/* ── Toast ── */
+function showToast(msg, type = 'success') {
+  let wrap = document.getElementById('pl-toast-wrap');
+  if (!wrap) { wrap = document.createElement('div'); wrap.id = 'pl-toast-wrap'; wrap.className = 'toast-wrap'; document.body.appendChild(wrap); }
+  const el = document.createElement('div');
+  el.className = `toast-item ${type}`;
+  el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 2800);
+}
+
+/* ── Parse response ── */
+function parsePromptsFromResponse(raw) {
+  const jsonMatch = raw.match(/```json\s*([\s\S]*?)```/);
+  if (jsonMatch) { try { return JSON.parse(jsonMatch[1].trim()); } catch {} }
+  const braceMatch = raw.match(/\{[\s\S]*"mainPrompt"[\s\S]*\}/);
+  if (braceMatch) { try { return JSON.parse(braceMatch[0]); } catch {} }
+  const extract = (label) => {
+    const re = new RegExp(`##\\s*[^\\n]*${label}[^\\n]*\\n([\\s\\S]*?)(?=##\\s|$)`, 'i');
+    const m = raw.match(re);
+    return m ? m[1].trim() : '';
+  };
+  return {
+    mainPrompt: extract('mainPrompt|主 Prompt|主 prompt'),
+    negativePrompt: extract('negativePrompt|负面 Prompt|负面 prompt'),
+    stylePrompt: extract('stylePrompt|风格 Prompt|风格 prompt'),
+    titleDesignSupportAssets: extract('titleDesignSupportAssets|标题.*支撑件|标题设计'),
+    titleText: extract('titleText|标题文字'),
+    titleStyleRef: extract('titleStyleRef|标题风格参考'),
+  };
+}
+
+/* ── Tag Component ── */
+function Tag({ text, color = 'blue' }) {
+  const colorMap = { blue:'bg-blue-500/15 text-blue-400', green:'bg-green-500/15 text-green-400', purple:'bg-purple-500/15 text-purple-400', orange:'bg-orange-500/15 text-orange-400', gray:'bg-gray-500/15 text-gray-400' };
+  return <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${colorMap[color] || colorMap.blue}`}>{text}</span>;
+}
+
+/* ── Prompt Card ── */
+function PromptCard({ icon, label, sublabel, value, onChange, minHeight = 100, onCopy }) {
+  return (
+    <div className="card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span>{icon}</span>
+          <span className="text-sm font-medium text-gray-300">{label}</span>
+          <span className="text-xs text-gray-600 font-mono">{sublabel}</span>
+        </div>
+        <button onClick={onCopy} className="btn-sm">复制</button>
+      </div>
+      <textarea
+        className="prompt-textarea" style={{ minHeight }}
+        value={value} onChange={(e) => onChange(e.target.value)}
+        placeholder="生成后可在此编辑..."
+      />
+    </div>
+  );
+}
+
+/* ── Main App ── */
+function App() {
+  const [skill01Data, setSkill01Data] = useState(null);
+  const [skill02Data, setSkill02Data] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [generated, setGenerated] = useState(false);
+
+  const [mainPrompt, setMainPrompt] = useState('');
+  const [negativePrompt, setNegativePrompt] = useState('');
+  const [stylePrompt, setStylePrompt] = useState('');
+  const [titleAssets, setTitleAssets] = useState('');
+  const [titleText, setTitleText] = useState('');
+  const [titleStyleRef, setTitleStyleRef] = useState('');
+
+  /* Load previous skill outputs */
+  useEffect(() => {
+    if (!window.PipelineStore) return;
+    const s1 = PipelineStore.getSkillOutput(1);
+    const s2 = PipelineStore.getSkillOutput(2);
+    if (s1) setSkill01Data(s1);
+    if (s2) setSkill02Data(s2);
+  }, []);
+
+  /* Build reference context */
+  const buildReferenceText = useCallback(() => {
+    let parts = [];
+    if (skill01Data) {
+      parts.push('=== 参考图分析结果 (Skill 01) ===');
+      if (typeof skill01Data === 'string') { parts.push(skill01Data); }
+      else {
+        ['posterType','styleKeywords','colorPalette','visualElements','visualAnalysis','a4','169','style','negative'].forEach(k => {
+          if (skill01Data[k]) parts.push(`${k}: ${Array.isArray(skill01Data[k]) ? skill01Data[k].join(', ') : skill01Data[k]}`);
+        });
+      }
+    }
+    if (skill02Data) {
+      parts.push('\n=== 文案拆解结果 (Skill 02) ===');
+      if (typeof skill02Data === 'string') { parts.push(skill02Data); }
+      else { ['title','subtitle','bodyCopy','cta'].forEach(k => { if (skill02Data[k]) parts.push(`${k}: ${skill02Data[k]}`); }); }
+    }
+    return parts.join('\n\n') || '（无前置数据，请根据通用海报需求生成 Prompt）';
+  }, [skill01Data, skill02Data]);
+
+  /* Generate */
+  const generate = useCallback(async () => {
+    setLoading(true);
+    const refText = buildReferenceText();
+    const userMsg = `请根据以下参考信息，构建完整的生图 Prompt 组合：\n\n${refText}`;
+    const result = await PipelineAPI.callAnalysis([
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userMsg },
+    ], { temperature: 0.7, maxTokens: 4096 });
+    setLoading(false);
+    if (!result) { showToast('生成失败，请检查 API 配置', 'error'); return; }
+    const parsed = parsePromptsFromResponse(result);
+    setMainPrompt(parsed.mainPrompt || '');
+    setNegativePrompt(parsed.negativePrompt || '');
+    setStylePrompt(parsed.stylePrompt || '');
+    setTitleAssets(parsed.titleDesignSupportAssets || '');
+    setTitleText(parsed.titleText || '');
+    setTitleStyleRef(parsed.titleStyleRef || '');
+    setGenerated(true);
+    showToast('Prompt 构建完成');
+  }, [buildReferenceText]);
+
+  const jsonData = { mainPrompt, negativePrompt, stylePrompt, titleDesignSupportAssets: titleAssets, titleText, titleStyleRef };
+
+  const copyText = (text, label) => {
+    navigator.clipboard.writeText(text).then(() => showToast(label || '已复制'));
+  };
+
+  const copyAll = () => {
+    const parts = ['=== 主 Prompt ===', mainPrompt, '', '=== 负面 Prompt ===', negativePrompt, '', '=== 风格 Prompt ===', stylePrompt, '', '=== 标题支撑件 Prompt ===', titleAssets, '', '=== 标题文字 ===', titleText, '', '=== 标题风格参考 ===', titleStyleRef].join('\n');
+    copyText(parts, '全部 Prompt 已复制');
+  };
+
+  const saveResult = () => {
+    const data = { ...jsonData };
+    try { if (window.PipelineStore) PipelineStore.saveSkillOutput(3, data); } catch {}
+    try { window.parent.postMessage({ type: 'skill-complete', skill: 3, data }, '*'); } catch {}
+    showToast('结果已保存', 'success');
+  };
+
+  const missingSkill01 = !skill01Data;
+  const missingSkill02 = !skill02Data;
+
+  /* Extract tags from skill01 */
+  const s1Tags = skill01Data && typeof skill01Data === 'object' ? [
+    ...(skill01Data.posterType ? [{ text: skill01Data.posterType, color: 'blue' }] : []),
+    ...(Array.isArray(skill01Data.styleKeywords) ? skill01Data.styleKeywords.map(k => ({ text: k, color: 'purple' })) : []),
+    ...(Array.isArray(skill01Data.colorPalette) ? skill01Data.colorPalette.map(c => ({ text: c, color: 'orange' })) : []),
+    ...(Array.isArray(skill01Data.visualElements) ? skill01Data.visualElements.map(v => ({ text: v, color: 'green' })) : []),
+  ] : [];
+
+  /* Extract refs from skill02 */
+  const s2Refs = skill02Data && typeof skill02Data === 'object' ? [
+    ...(skill02Data.title ? [{ key: '标题', val: skill02Data.title }] : []),
+    ...(skill02Data.subtitle ? [{ key: '副标题', val: skill02Data.subtitle }] : []),
+    ...(skill02Data.bodyCopy ? [{ key: '正文', val: skill02Data.bodyCopy }] : []),
+    ...(skill02Data.cta ? [{ key: 'CTA', val: skill02Data.cta }] : []),
+  ] : [];
+
+  return (
+    <div className="max-w-[960px] mx-auto px-4 py-6">
+      {/* Header (standalone only) */}
+      {isStandalone && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <a href="../../index.html" className="text-xs text-gray-600 hover:text-gray-400 transition-colors mb-1 inline-block">← 返回流水线</a>
+              <h1 className="text-xl font-semibold text-white flex items-center gap-2">
+                <span className="text-2xl">🧩</span> Prompt 构建
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">Skill 03 — 根据参考图分析和文案拆解，构建完整生图 Prompt</p>
+            </div>
+            <button onClick={() => window.parent?.postMessage({type:'open-settings'}, '*')} className="text-gray-500 hover:text-gray-300 transition-colors text-lg" title="API 设置">⚙️</button>
+          </div>
+          <div className="border-b border-dark-500 mt-4"></div>
+        </div>
+      )}
+
+      {/* Warning banners */}
+      {(missingSkill01 || missingSkill02) && (
+        <div className="bg-yellow-900/20 border border-yellow-700/40 rounded-lg p-4 mb-6 flex items-start gap-3">
+          <span className="text-yellow-500 text-lg mt-0.5">⚠️</span>
+          <div>
+            <p className="text-yellow-200 font-medium text-sm">缺少前置步骤数据</p>
+            <div className="text-yellow-200/60 text-xs mt-1 space-y-1">
+              {missingSkill01 && <p>缺少 <a href="../skill-01/index.html" className="underline text-yellow-300 hover:text-yellow-200">Skill 01（参考图反推）</a> 输出</p>}
+              {missingSkill02 && <p>缺少 <a href="../skill-02/index.html" className="underline text-yellow-300 hover:text-yellow-200">Skill 02（文案拆解）</a> 输出</p>}
+              <p className="mt-1">仍可手动生成，但效果可能不如完整流程。</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Input Display */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {/* Skill 01 card */}
+        <div className="card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-base">📷</span>
+            <span className="text-sm font-medium text-gray-300">参考图分析 (Skill 01)</span>
+          </div>
+          {skill01Data ? (
+            <>
+              {s1Tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {s1Tags.map((t, i) => <Tag key={i} text={t.text} color={t.color} />)}
+                </div>
+              )}
+              <div className="text-xs text-gray-400 bg-dark-900 rounded-lg p-3 max-h-[140px] overflow-y-auto leading-relaxed font-mono whitespace-pre-wrap">
+                {typeof skill01Data === 'string'
+                  ? skill01Data.slice(0, 500)
+                  : JSON.stringify(skill01Data, null, 2).slice(0, 500)}
+              </div>
+            </>
+          ) : (
+            <div className="text-xs text-gray-600 italic bg-dark-900 rounded-lg p-3 text-center">暂无数据 — 请先完成 Skill 01</div>
+          )}
+        </div>
+
+        {/* Skill 02 card */}
+        <div className="card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-base">📝</span>
+            <span className="text-sm font-medium text-gray-300">文案拆解 (Skill 02)</span>
+          </div>
+          {skill02Data ? (
+            <>
+              {s2Refs.length > 0 && (
+                <div className="space-y-1.5 mb-3">
+                  {s2Refs.map((r, i) => (
+                    <div key={i} className="flex gap-2 text-xs">
+                      <span className="text-gray-600 font-mono shrink-0">{r.key}:</span>
+                      <span className="text-gray-300 truncate">{r.val}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="text-xs text-gray-400 bg-dark-900 rounded-lg p-3 max-h-[140px] overflow-y-auto leading-relaxed font-mono whitespace-pre-wrap">
+                {typeof skill02Data === 'string'
+                  ? skill02Data.slice(0, 500)
+                  : JSON.stringify(skill02Data, null, 2).slice(0, 500)}
+              </div>
+            </>
+          ) : (
+            <div className="text-xs text-gray-600 italic bg-dark-900 rounded-lg p-3 text-center">暂无数据 — 请先完成 Skill 02</div>
+          )}
+        </div>
+      </div>
+
+      {/* Generate Button */}
+      <div className="flex items-center gap-3 mb-6">
+        <button onClick={generate} disabled={loading}
+          className="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold px-6 py-2.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 text-sm">
+          {loading ? <><div className="spinner" style={{width:18,height:18,borderWidth:2}}></div>构建中...</> : <>🧩 构建 Prompt</>}
+        </button>
+        {generated && (
+          <button onClick={generate} disabled={loading}
+            className="bg-dark-700 hover:bg-dark-600 text-gray-300 border border-dark-500 px-4 py-2.5 rounded-lg transition-all text-sm flex items-center gap-2 disabled:opacity-40">
+            🔄 重新生成全部
+          </button>
+        )}
+      </div>
+
+      {/* Loading */}
+      {loading && !generated && (
+        <div className="text-center py-16">
+          <div className="spinner mx-auto mb-4"></div>
+          <p className="text-gray-500 text-sm">正在构建 Prompt 组合...</p>
+        </div>
+      )}
+
+      {/* Results */}
+      {generated && (
+        <div className="space-y-4">
+          <PromptCard icon="🎯" label="主 Prompt" sublabel="mainPrompt" value={mainPrompt} onChange={setMainPrompt} minHeight={180} onCopy={() => copyText(mainPrompt, '主 Prompt 已复制')} />
+          <PromptCard icon="🚫" label="负面 Prompt" sublabel="negativePrompt" value={negativePrompt} onChange={setNegativePrompt} minHeight={100} onCopy={() => copyText(negativePrompt, '负面 Prompt 已复制')} />
+          <PromptCard icon="🎭" label="风格 Prompt" sublabel="stylePrompt" value={stylePrompt} onChange={setStylePrompt} minHeight={100} onCopy={() => copyText(stylePrompt, '风格 Prompt 已复制')} />
+          <PromptCard icon="🎨" label="标题支撑件 Prompt" sublabel="titleDesignSupportAssets" value={titleAssets} onChange={setTitleAssets} minHeight={100} onCopy={() => copyText(titleAssets, '标题支撑件 Prompt 已复制')} />
+
+          {/* Read-only fields */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="card p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span>📝</span>
+                <span className="text-sm font-medium text-gray-300">标题文字</span>
+                <span className="text-xs text-gray-600 font-mono">titleText</span>
+              </div>
+              <div className="text-sm text-blue-300 bg-dark-900 rounded-lg p-3 min-h-[40px]">
+                {titleText || <span className="text-gray-600 italic">未生成</span>}
+              </div>
+            </div>
+            <div className="card p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span>📋</span>
+                <span className="text-sm font-medium text-gray-300">标题风格参考</span>
+                <span className="text-xs text-gray-600 font-mono">titleStyleRef</span>
+              </div>
+              <div className="text-xs text-gray-400 bg-dark-900 rounded-lg p-3 min-h-[40px] leading-relaxed">
+                {titleStyleRef || <span className="text-gray-600 italic">未生成</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* JSON preview */}
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span>📦</span>
+                <span className="text-sm font-medium text-gray-300">JSON 预览</span>
+              </div>
+              <button onClick={() => copyText(JSON.stringify(jsonData, null, 2), 'JSON 已复制')} className="btn-sm">复制 JSON</button>
+            </div>
+            <pre className="json-preview">{JSON.stringify(jsonData, null, 2)}</pre>
+          </div>
+
+          {/* Quick Actions + Save */}
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <button onClick={() => copyText(mainPrompt, '主 Prompt 已复制')} className="btn-secondary">📋 复制主 Prompt</button>
+            <button onClick={copyAll} className="btn-secondary">📋 复制全部</button>
+            <div className="flex-1"></div>
+            <button onClick={saveResult} className="btn-primary">💾 保存结果</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
 </body>
 </html>

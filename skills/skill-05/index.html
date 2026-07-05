@@ -3,21 +3,798 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>排版合成 — Prompt Lab — Prompt Lab</title>
+<title>排版合成 — Prompt Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        surface: { DEFAULT: '#141420', light: '#1e1e2e', dark: '#0a0a14' },
+        accent: { DEFAULT: '#f59e0b', light: '#fbbf24', dark: '#d97706' },
+      }
+    }
+  }
+}
+</script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="stylesheet" href="../../style.css">
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#0a0a14; color:#e0e0e0; min-height:100vh; display:flex; align-items:center; justify-content:center; }
-.placeholder { text-align:center; }
-.placeholder .icon { font-size:48px; margin-bottom:16px; }
-.placeholder h2 { font-size:18px; font-weight:600; margin-bottom:8px; }
-.placeholder p { font-size:13px; color:#666; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a12; color: #e0e0e8; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(245,158,11,0.3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(245,158,11,0.5); }
+input[type="range"] { -webkit-appearance: none; height: 4px; background: #2a2a3e; border-radius: 2px; outline: none; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: #f59e0b; border-radius: 50%; cursor: pointer; }
+input[type="color"] { -webkit-appearance: none; border: none; width: 32px; height: 28px; border-radius: 4px; cursor: pointer; background: transparent; }
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type="color"]::-webkit-color-swatch { border: 1px solid #3a3a4e; border-radius: 4px; }
+.quality-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
 </style>
 </head>
 <body>
-<div class="placeholder">
-  <div class="icon">🖼️</div>
-  <h2>排版合成</h2>
-  <p>此 Skill 尚未开发，即将上线 🚀</p>
-</div>
+<div id="root"></div>
+
+<script src="../../shared/config.js"></script>
+<script src="../../shared/store.js"></script>
+<script src="../../shared/api.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+/* ── Standalone detection ── */
+const isStandalone = window.self === window.top;
+
+/* ── Canvas size presets ── */
+const SIZE_PRESETS = [
+  { label: '横版A4 (1123x794)', w: 1123, h: 794 },
+  { label: '竖版A4 (794x1123)', w: 794, h: 1123 },
+  { label: '16:9 (1920x1080)', w: 1920, h: 1080 },
+];
+
+/* ── Chinese font stack ── */
+const CN_FONT = '"STHeiti", "Microsoft YaHei", "PingFang SC", sans-serif';
+
+/* ── Contrast ratio helper (WCAG) ── */
+function luminance(r, g, b) {
+  const a = [r, g, b].map(v => {
+    v /= 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+}
+function contrastRatio(hex1, hex2) {
+  const parse = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+  const [r1,g1,b1] = parse(hex1);
+  const [r2,g2,b2] = parse(hex2);
+  const l1 = luminance(r1,g1,b1), l2 = luminance(r2,g2,b2);
+  const lighter = Math.max(l1,l2), darker = Math.min(l1,l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/* ── Toast system ── */
+function useToast() {
+  const [toasts, setToasts] = useState([]);
+  const show = useCallback((msg, type='info') => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, msg, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 2800);
+  }, []);
+  const ToastContainer = () => (
+    <div className="fixed top-5 right-5 z-[10000] flex flex-col gap-2 pointer-events-none">
+      {toasts.map(t => (
+        <div key={t.id}
+          className={`px-5 py-3 rounded-lg text-sm font-medium shadow-lg pointer-events-auto transition-all ${
+            t.type === 'success' ? 'bg-emerald-600' : t.type === 'error' ? 'bg-red-600' : 'bg-indigo-600'
+          } text-white`}
+          style={{ animation: 'slideIn 0.3s ease' }}
+        >{t.msg}</div>
+      ))}
+    </div>
+  );
+  return { show, ToastContainer };
+}
+
+/* ── Main App ── */
+function App() {
+  const { show, ToastContainer } = useToast();
+
+  // Pipeline data from previous skills
+  const [pipeData, setPipeData] = useState({ bgImage: null, title: '', subtitle: '', bodyCopy: '', styleRef: null });
+  const [dataReady, setDataReady] = useState(false);
+  const [inputWarnings, setInputWarnings] = useState([]);
+
+  // Canvas size
+  const [canvasW, setCanvasW] = useState(1123);
+  const [canvasH, setCanvasH] = useState(794);
+  const [sizePreset, setSizePreset] = useState(0);
+
+  // Title style
+  const [titleStyle, setTitleStyle] = useState({
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    strokeColor: '#000000',
+    strokeWidth: 2,
+    shadowColor: '#000000',
+    shadowBlur: 8,
+    shadowOffX: 2,
+    shadowOffY: 2,
+    glowColor: '#f59e0b',
+    glowBlur: 20,
+    align: 'center',
+    lineHeight: 1.3,
+    x: 50,   // percent
+    y: 40,   // percent
+  });
+
+  // Subtitle style
+  const [subStyle, setSubStyle] = useState({
+    fontSize: 24,
+    color: '#cccccc',
+    yOffset: 50,  // px offset below title block
+  });
+
+  // Quality check results
+  const [qualityResults, setQualityResults] = useState([]);
+
+  // Canvas ref
+  const canvasRef = useRef(null);
+  const bgImgRef = useRef(null);
+
+  // Custom size input
+  const [customW, setCustomW] = useState('1123');
+  const [customH, setCustomH] = useState('794');
+
+  /* ── Load pipeline data ── */
+  useEffect(() => {
+    const warnings = [];
+    try {
+      const s4 = PipelineStore.getSkillOutput(4);
+      const s2 = PipelineStore.getSkillOutput(2);
+      const s3 = PipelineStore.getSkillOutput(3);
+
+      // Background image from Skill 04
+      let imgUrl = '';
+      if (s4?.fullCanvas?.url) imgUrl = s4.fullCanvas.url;
+      else if (s4?.url) imgUrl = s4.url;
+
+      if (!imgUrl) {
+        warnings.push('缺少 Skill 04 背景图，请先完成「生图执行」步骤');
+      } else {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => { bgImgRef.current = img; setPipeData(p => ({ ...p, bgImage: imgUrl })); };
+        img.onerror = () => warnings.push('背景图加载失败');
+        img.src = imgUrl;
+      }
+
+      // Text from Skill 02
+      let title = '', subtitle = '', bodyCopy = '';
+      if (s2) {
+        title = s2.title || '';
+        subtitle = s2.subtitle || '';
+        bodyCopy = Array.isArray(s2.bodyCopy) ? s2.bodyCopy.join('\n') : (s2.bodyCopy || '');
+      }
+      if (!title) warnings.push('缺少 Skill 02 标题文案');
+      setPipeData(p => ({ ...p, title, subtitle, bodyCopy }));
+
+      // Style ref from Skill 03
+      const styleRef = s3?.result?.styleReference || s3?.result?.styleRef || s3?.result || null;
+      if (styleRef) setPipeData(p => ({ ...p, styleRef }));
+    } catch (e) {
+      console.warn('[Skill-05] Failed to load pipeline data:', e);
+    }
+    setInputWarnings(warnings);
+    setDataReady(true);
+  }, []);
+
+  /* ── Apply style reference from Skill 03 ── */
+  useEffect(() => {
+    if (!pipeData.styleRef) return;
+    try {
+      const ref = typeof pipeData.styleRef === 'string' ? JSON.parse(pipeData.styleRef) : pipeData.styleRef;
+      if (ref.fontSize) setTitleStyle(s => ({ ...s, fontSize: ref.fontSize }));
+      if (ref.fontWeight) setTitleStyle(s => ({ ...s, fontWeight: ref.fontWeight }));
+      if (ref.color) setTitleStyle(s => ({ ...s, color: ref.color }));
+      if (ref.strokeColor) setTitleStyle(s => ({ ...s, strokeColor: ref.strokeColor }));
+      if (ref.strokeWidth !== undefined) setTitleStyle(s => ({ ...s, strokeWidth: ref.strokeWidth }));
+      if (ref.shadowColor) setTitleStyle(s => ({ ...s, shadowColor: ref.shadowColor }));
+      if (ref.shadowBlur !== undefined) setTitleStyle(s => ({ ...s, shadowBlur: ref.shadowBlur }));
+      if (ref.glowColor) setTitleStyle(s => ({ ...s, glowColor: ref.glowColor }));
+      if (ref.glowBlur !== undefined) setTitleStyle(s => ({ ...s, glowBlur: ref.glowBlur }));
+    } catch {}
+  }, [pipeData.styleRef]);
+
+  /* ── Word-wrap helper ── */
+  function wrapText(ctx, text, maxWidth) {
+    const lines = [];
+    for (const para of text.split('\n')) {
+      if (!para) { lines.push(''); continue; }
+      let line = '';
+      for (const char of para) {
+        const test = line + char;
+        if (ctx.measureText(test).width > maxWidth && line) {
+          lines.push(line);
+          line = char;
+        } else {
+          line = test;
+        }
+      }
+      if (line) lines.push(line);
+    }
+    return lines;
+  }
+
+  /* ── Canvas rendering ── */
+  const renderCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvasW, H = canvasH;
+    canvas.width = W;
+    canvas.height = H;
+
+    // 1. Background
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, W, H);
+
+    const drawText = () => drawTextLayers(ctx, W, H);
+
+    if (bgImgRef.current) {
+      const img = bgImgRef.current;
+      const imgRatio = img.width / img.height;
+      const canRatio = W / H;
+      let sx, sy, sw, sh;
+      if (imgRatio > canRatio) {
+        sh = img.height; sw = sh * canRatio;
+        sx = (img.width - sw) / 2; sy = 0;
+      } else {
+        sw = img.width; sh = sw / canRatio;
+        sx = 0; sy = (img.height - sh) / 2;
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+      drawText();
+    } else {
+      // Gradient placeholder
+      const grad = ctx.createLinearGradient(0, 0, W, H);
+      grad.addColorStop(0, '#1a1a2e');
+      grad.addColorStop(0.5, '#16213e');
+      grad.addColorStop(1, '#0f3460');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+      drawText();
+    }
+  }, [canvasW, canvasH, titleStyle, subStyle, pipeData]);
+
+  function drawTextLayers(ctx, W, H) {
+    const title = pipeData.title || '';
+    const subtitle = pipeData.subtitle || '';
+
+    // ── Title rendering (multi-layer Pillow-style) ──
+    if (title) {
+      const tX = (titleStyle.x / 100) * W;
+      const tY = (titleStyle.y / 100) * H;
+      const font = `${titleStyle.fontWeight} ${titleStyle.fontSize}px ${CN_FONT}`;
+      ctx.font = font;
+      ctx.textBaseline = 'top';
+
+      const alignMap = { left: 'left', center: 'center', right: 'right' };
+      ctx.textAlign = alignMap[titleStyle.align] || 'center';
+
+      let anchorX = tX;
+      if (titleStyle.align === 'left') anchorX = W * 0.075;
+      else if (titleStyle.align === 'right') anchorX = W * 0.925;
+
+      const maxTextW = W * 0.85;
+      const lines = wrapText(ctx, title, maxTextW);
+
+      for (let i = 0; i < lines.length; i++) {
+        const ly = tY + i * titleStyle.fontSize * titleStyle.lineHeight;
+
+        // Layer 1: Shadow
+        if (titleStyle.shadowBlur > 0) {
+          ctx.save();
+          ctx.shadowColor = titleStyle.shadowColor;
+          ctx.shadowBlur = titleStyle.shadowBlur;
+          ctx.shadowOffsetX = titleStyle.shadowOffX;
+          ctx.shadowOffsetY = titleStyle.shadowOffY;
+          ctx.fillStyle = titleStyle.color;
+          ctx.fillText(lines[i], anchorX, ly);
+          ctx.restore();
+        }
+
+        // Layer 2: Glow (multiple shadow passes)
+        if (titleStyle.glowBlur > 0) {
+          ctx.save();
+          ctx.shadowColor = titleStyle.glowColor;
+          ctx.shadowBlur = titleStyle.glowBlur;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+          ctx.globalAlpha = 0.3;
+          ctx.fillStyle = titleStyle.color;
+          ctx.fillText(lines[i], anchorX, ly);
+          ctx.fillText(lines[i], anchorX, ly);
+          ctx.restore();
+        }
+
+        // Layer 3: Stroke
+        if (titleStyle.strokeWidth > 0) {
+          ctx.save();
+          ctx.strokeStyle = titleStyle.strokeColor;
+          ctx.lineWidth = titleStyle.strokeWidth * 2;
+          ctx.lineJoin = 'round';
+          ctx.miterLimit = 2;
+          ctx.strokeText(lines[i], anchorX, ly);
+          ctx.restore();
+        }
+
+        // Layer 4: Base fill
+        ctx.fillStyle = titleStyle.color;
+        ctx.fillText(lines[i], anchorX, ly);
+      }
+
+      // ── Subtitle ──
+      if (subtitle) {
+        const subFontSize = subStyle.fontSize;
+        ctx.font = `500 ${subFontSize}px ${CN_FONT}`;
+        ctx.textBaseline = 'top';
+        ctx.textAlign = alignMap[titleStyle.align] || 'center';
+
+        const subtitleBaseY = tY + lines.length * titleStyle.fontSize * titleStyle.lineHeight + subStyle.yOffset;
+
+        // Subtitle shadow
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.6)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
+        ctx.fillStyle = subStyle.color;
+        ctx.fillText(subtitle, anchorX, subtitleBaseY);
+        ctx.restore();
+      }
+    }
+
+    // ── Run quality check ──
+    runQualityCheck(ctx, W, H);
+  }
+
+  /* ── Quality check ── */
+  function runQualityCheck(ctx, W, H) {
+    const results = [];
+    const title = pipeData.title || '';
+
+    // 1. Title legibility - sample background pixel at text position
+    const sampleX = Math.min(Math.floor((titleStyle.x / 100) * W), W - 1);
+    const sampleY = Math.min(Math.floor((titleStyle.y / 100) * H), H - 1);
+    let bgHex = '#1a1a2e';
+    try {
+      const pixel = ctx.getImageData(sampleX, sampleY, 1, 1).data;
+      bgHex = '#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+    } catch {}
+    const cr = contrastRatio(titleStyle.color, bgHex);
+    if (cr >= 4.5) {
+      results.push({ ok: true, msg: `文字可读性: 对比度 ${cr.toFixed(1)}:1` });
+    } else if (cr >= 3) {
+      results.push({ ok: false, msg: `文字可读性: 对比度 ${cr.toFixed(1)}:1, 建议 > 4.5:1` });
+    } else {
+      results.push({ ok: false, msg: `文字可读性: 对比度 ${cr.toFixed(1)}:1, 可读性差` });
+    }
+
+    // 2. Text within canvas bounds
+    ctx.font = `${titleStyle.fontWeight} ${titleStyle.fontSize}px ${CN_FONT}`;
+    const titleW = ctx.measureText(title || '标题').width;
+    const titleLeft = titleStyle.align === 'left' ? (W * 0.075)
+      : titleStyle.align === 'right' ? (W * 0.925 - titleW)
+      : ((titleStyle.x / 100) * W - titleW / 2);
+    const titleRight = titleLeft + titleW;
+    const margin = 20;
+    const withinBounds = titleLeft >= margin && titleRight <= W - margin && titleStyle.y >= 5 && titleStyle.y <= 85;
+    results.push({
+      ok: withinBounds,
+      msg: withinBounds ? '文字在画布范围内' : '文字超出画布边界，请调整位置或字号'
+    });
+
+    // 3. Title present
+    results.push({
+      ok: !!title.trim(),
+      msg: title.trim() ? '标题内容已填写' : '缺少标题内容'
+    });
+
+    setQualityResults(results);
+  }
+
+  /* ── Render on data change ── */
+  useEffect(() => { renderCanvas(); }, [renderCanvas]);
+
+  /* ── Export ── */
+  function exportCanvas(scale = 1) {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let target = canvas;
+    if (scale !== 1) {
+      target = document.createElement('canvas');
+      target.width = canvasW * scale;
+      target.height = canvasH * scale;
+      const tCtx = target.getContext('2d');
+      tCtx.scale(scale, scale);
+      // Re-render at higher resolution
+      tCtx.fillStyle = '#1a1a2e';
+      tCtx.fillRect(0, 0, canvasW, canvasH);
+      if (bgImgRef.current) {
+        const img = bgImgRef.current;
+        const imgRatio = img.width / img.height;
+        const canRatio = canvasW / canvasH;
+        let sx, sy, sw, sh;
+        if (imgRatio > canRatio) { sh = img.height; sw = sh * canRatio; sx = (img.width - sw) / 2; sy = 0; }
+        else { sw = img.width; sh = sw / canRatio; sx = 0; sy = (img.height - sh) / 2; }
+        tCtx.drawImage(img, sx, sy, sw, sh, 0, 0, canvasW, canvasH);
+      }
+      drawTextLayers(tCtx, canvasW, canvasH);
+    }
+    const url = target.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `layout-${canvasW * scale}x${canvasH * scale}${scale > 1 ? `@${scale}x` : ''}.png`;
+    a.click();
+    show(scale > 1 ? `已导出高清 ${canvasW * scale}x${canvasH * scale}` : '已导出 PNG', 'success');
+  }
+
+  /* ── Save to pipeline ── */
+  function saveResult() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const url = canvas.toDataURL('image/png');
+    const allPassed = qualityResults.every(r => r.ok);
+    const issues = qualityResults.filter(r => !r.ok).map(r => r.msg);
+    const data = {
+      finalImage: { url, width: canvasW, height: canvasH },
+      titleRendered: !!pipeData.title,
+      qualityCheck: { passed: allPassed, issues },
+    };
+    try { PipelineStore.saveSkillOutput(5, data); } catch {}
+    try { window.parent.postMessage({ type: 'skill-complete', skill: 5, data }, '*'); } catch {}
+    show('已保存最终结果', 'success');
+  }
+
+  /* ── Size preset change ── */
+  function applySizePreset(idx) {
+    setSizePreset(idx);
+    if (idx < SIZE_PRESETS.length) {
+      setCanvasW(SIZE_PRESETS[idx].w);
+      setCanvasH(SIZE_PRESETS[idx].h);
+      setCustomW(String(SIZE_PRESETS[idx].w));
+      setCustomH(String(SIZE_PRESETS[idx].h));
+    }
+  }
+
+  function applyCustomSize() {
+    const w = parseInt(customW) || 1123;
+    const h = parseInt(customH) || 794;
+    setCanvasW(Math.max(200, Math.min(4096, w)));
+    setCanvasH(Math.max(200, Math.min(4096, h)));
+    setSizePreset(SIZE_PRESETS.length);
+  }
+
+  /* ── Scale factor for display ── */
+  const displayScale = useMemo(() => {
+    const maxW = 720;
+    return Math.min(1, maxW / canvasW);
+  }, [canvasW]);
+
+  const hasPrereqs = pipeData.bgImage || pipeData.title;
+
+  /* ── Render ── */
+  return (
+    <div className="min-h-screen p-4 md:p-6">
+      <ToastContainer />
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🖼️</span>
+          <div>
+            <h1 className="text-lg font-semibold text-white">排版合成</h1>
+            <p className="text-xs text-gray-500">Layout & Composition</p>
+          </div>
+        </div>
+        {!isStandalone && (
+          <span className="text-xs text-gray-600 bg-gray-800/50 px-2 py-1 rounded">嵌入模式</span>
+        )}
+      </div>
+
+      {/* Missing prerequisites warning */}
+      {inputWarnings.length > 0 && dataReady && (
+        <div className="bg-amber-900/20 border border-amber-700/40 rounded-lg p-4 mb-4">
+          <p className="text-xs font-semibold text-amber-400 mb-1">⚠️ 输入数据警告</p>
+          {inputWarnings.map((w, i) => <p key={i} className="text-xs text-amber-300/80">{w}</p>)}
+        </div>
+      )}
+
+      <div className="flex flex-col lg:flex-row gap-4">
+        {/* ── Left: Controls Panel ── */}
+        <div className="w-full lg:w-[280px] flex-shrink-0 space-y-3 max-h-[calc(100vh-100px)] overflow-y-auto pr-1">
+
+          {/* Canvas Size */}
+          <div className="bg-gray-900/60 border border-gray-800 rounded-lg p-3">
+            <div className="text-xs font-medium text-gray-400 mb-2">画布尺寸</div>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {SIZE_PRESETS.map((p, i) => (
+                <button key={i} onClick={() => applySizePreset(i)}
+                  className={`text-xs px-2.5 py-1 rounded transition ${sizePreset === i ? 'bg-amber-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
+                  {p.label.split(' ')[0]}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="number" value={customW} onChange={e => setCustomW(e.target.value)}
+                className="w-20 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 outline-none focus:border-amber-600" />
+              <span className="text-gray-600 text-xs">x</span>
+              <input type="number" value={customH} onChange={e => setCustomH(e.target.value)}
+                className="w-20 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 outline-none focus:border-amber-600" />
+              <button onClick={applyCustomSize}
+                className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 px-2 py-1 rounded">应用</button>
+            </div>
+          </div>
+
+          {/* Title Controls */}
+          <div className="bg-gray-900/60 border border-gray-800 rounded-lg p-3">
+            <div className="text-xs font-medium text-amber-500 mb-2">标题样式</div>
+
+            {/* Input display */}
+            <div className="bg-gray-800/60 rounded p-2 mb-2 text-xs text-gray-400">
+              <div className="truncate">{pipeData.title || '（无标题）'}</div>
+              {pipeData.subtitle && <div className="truncate mt-1 text-gray-500">{pipeData.subtitle}</div>}
+            </div>
+
+            {/* Font size: 24-120px, default 48 */}
+            <label className="flex items-center justify-between text-xs text-gray-400 mb-1">
+              <span>字号</span><span className="text-amber-400">{titleStyle.fontSize}px</span>
+            </label>
+            <input type="range" min="24" max="120" value={titleStyle.fontSize}
+              onChange={e => setTitleStyle(s => ({ ...s, fontSize: +e.target.value }))}
+              className="w-full mb-2" />
+
+            {/* Font weight: normal/bold/900 */}
+            <label className="flex items-center justify-between text-xs text-gray-400 mb-1">
+              <span>字重</span>
+            </label>
+            <div className="flex gap-1 mb-2">
+              {[['normal','Regular'],['bold','Bold'],['900','Black']].map(([v,l]) => (
+                <button key={v} onClick={() => setTitleStyle(s => ({ ...s, fontWeight: v }))}
+                  className={`flex-1 text-xs py-1.5 rounded transition ${titleStyle.fontWeight === v ? 'bg-amber-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+
+            {/* Text color picker */}
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">文字颜色</label>
+                <div className="flex items-center gap-1.5">
+                  <input type="color" value={titleStyle.color}
+                    onChange={e => setTitleStyle(s => ({ ...s, color: e.target.value }))} />
+                  <span className="text-xs text-gray-500">{titleStyle.color}</span>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">描边颜色</label>
+                <div className="flex items-center gap-1.5">
+                  <input type="color" value={titleStyle.strokeColor}
+                    onChange={e => setTitleStyle(s => ({ ...s, strokeColor: e.target.value }))} />
+                  <span className="text-xs text-gray-500">{titleStyle.strokeColor}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Stroke width: 0-8px */}
+            <label className="flex items-center justify-between text-xs text-gray-400 mb-1">
+              <span>描边宽度</span><span className="text-amber-400">{titleStyle.strokeWidth}px</span>
+            </label>
+            <input type="range" min="0" max="8" value={titleStyle.strokeWidth}
+              onChange={e => setTitleStyle(s => ({ ...s, strokeWidth: +e.target.value }))}
+              className="w-full mb-2" />
+
+            {/* Shadow controls */}
+            <div className="text-xs text-gray-500 mt-2 mb-1">阴影</div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">颜色</label>
+                <input type="color" value={titleStyle.shadowColor}
+                  onChange={e => setTitleStyle(s => ({ ...s, shadowColor: e.target.value }))} />
+              </div>
+              <div>
+                <label className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                  <span>模糊</span><span>{titleStyle.shadowBlur}</span>
+                </label>
+                <input type="range" min="0" max="20" value={titleStyle.shadowBlur}
+                  onChange={e => setTitleStyle(s => ({ ...s, shadowBlur: +e.target.value }))}
+                  className="w-full" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div>
+                <label className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                  <span>偏移X</span><span>{titleStyle.shadowOffX}</span>
+                </label>
+                <input type="range" min="-10" max="10" value={titleStyle.shadowOffX}
+                  onChange={e => setTitleStyle(s => ({ ...s, shadowOffX: +e.target.value }))}
+                  className="w-full" />
+              </div>
+              <div>
+                <label className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                  <span>偏移Y</span><span>{titleStyle.shadowOffY}</span>
+                </label>
+                <input type="range" min="-10" max="10" value={titleStyle.shadowOffY}
+                  onChange={e => setTitleStyle(s => ({ ...s, shadowOffY: +e.target.value }))}
+                  className="w-full" />
+              </div>
+            </div>
+
+            {/* Glow */}
+            <div className="text-xs text-gray-500 mt-2 mb-1">外发光</div>
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">颜色</label>
+                <input type="color" value={titleStyle.glowColor}
+                  onChange={e => setTitleStyle(s => ({ ...s, glowColor: e.target.value }))} />
+              </div>
+              <div>
+                <label className="flex items-center justify-between text-xs text-gray-400 mb-1">
+                  <span>半径</span><span>{titleStyle.glowBlur}</span>
+                </label>
+                <input type="range" min="0" max="60" value={titleStyle.glowBlur}
+                  onChange={e => setTitleStyle(s => ({ ...s, glowBlur: +e.target.value }))}
+                  className="w-full" />
+              </div>
+            </div>
+
+            {/* Text alignment: left/center/right */}
+            <label className="text-xs text-gray-400 block mb-1">对齐</label>
+            <div className="flex gap-1 mb-2">
+              {['left','center','right'].map(a => (
+                <button key={a} onClick={() => setTitleStyle(s => ({ ...s, align: a }))}
+                  className={`flex-1 text-xs py-1.5 rounded transition ${titleStyle.align === a ? 'bg-amber-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
+                  {a === 'left' ? '左' : a === 'center' ? '中' : '右'}
+                </button>
+              ))}
+            </div>
+
+            {/* X position: 0-100% */}
+            <label className="flex items-center justify-between text-xs text-gray-400 mb-1">
+              <span>X 位置</span><span className="text-amber-400">{titleStyle.x}%</span>
+            </label>
+            <input type="range" min="0" max="100" value={titleStyle.x}
+              onChange={e => setTitleStyle(s => ({ ...s, x: +e.target.value }))}
+              className="w-full mb-2" />
+
+            {/* Y position: 0-100% */}
+            <label className="flex items-center justify-between text-xs text-gray-400 mb-1">
+              <span>Y 位置</span><span className="text-amber-400">{titleStyle.y}%</span>
+            </label>
+            <input type="range" min="0" max="100" value={titleStyle.y}
+              onChange={e => setTitleStyle(s => ({ ...s, y: +e.target.value }))}
+              className="w-full mb-2" />
+
+            {/* Line height */}
+            <label className="flex items-center justify-between text-xs text-gray-400 mb-1">
+              <span>行高</span><span className="text-amber-400">{titleStyle.lineHeight}</span>
+            </label>
+            <input type="range" min="1" max="2.5" step="0.1" value={titleStyle.lineHeight}
+              onChange={e => setTitleStyle(s => ({ ...s, lineHeight: +e.target.value }))}
+              className="w-full" />
+          </div>
+
+          {/* Subtitle Controls */}
+          <div className="bg-gray-900/60 border border-gray-800 rounded-lg p-3">
+            <div className="text-xs font-medium text-amber-500 mb-2">副标题样式</div>
+
+            {/* Font size: 12-48px, default 24 */}
+            <label className="flex items-center justify-between text-xs text-gray-400 mb-1">
+              <span>字号</span><span className="text-amber-400">{subStyle.fontSize}px</span>
+            </label>
+            <input type="range" min="12" max="48" value={subStyle.fontSize}
+              onChange={e => setSubStyle(s => ({ ...s, fontSize: +e.target.value }))}
+              className="w-full mb-2" />
+
+            {/* Color picker */}
+            <div className="flex items-center gap-2 mb-2">
+              <label className="text-xs text-gray-400">颜色</label>
+              <input type="color" value={subStyle.color}
+                onChange={e => setSubStyle(s => ({ ...s, color: e.target.value }))} />
+              <span className="text-xs text-gray-500">{subStyle.color}</span>
+            </div>
+
+            {/* Y offset from title */}
+            <label className="flex items-center justify-between text-xs text-gray-400 mb-1">
+              <span>距标题偏移</span><span className="text-amber-400">{subStyle.yOffset}px</span>
+            </label>
+            <input type="range" min="0" max="120" value={subStyle.yOffset}
+              onChange={e => setSubStyle(s => ({ ...s, yOffset: +e.target.value }))}
+              className="w-full" />
+          </div>
+
+          {/* Style reference info */}
+          {pipeData.styleRef && (
+            <div className="bg-gray-900/60 border border-gray-800 rounded-lg p-3">
+              <div className="text-xs font-medium text-amber-500 mb-1">样式参考 (Skill 03)</div>
+              <div className="text-xs text-gray-500">已自动应用样式参考参数</div>
+            </div>
+          )}
+
+          {/* Input data preview */}
+          <div className="bg-gray-900/60 border border-gray-800 rounded-lg p-3">
+            <div className="text-xs font-medium text-gray-400 mb-2">输入数据</div>
+            <div className="bg-gray-800/60 rounded p-2 text-[11px] space-y-1.5">
+              <div><span className="text-gray-500">标题:</span> <span className="text-gray-300">{pipeData.title || '(空)'}</span></div>
+              <div><span className="text-gray-500">副标题:</span> <span className="text-gray-300">{pipeData.subtitle || '(空)'}</span></div>
+              <div><span className="text-gray-500">背景图:</span> <span className={bgImgRef.current ? 'text-emerald-400' : 'text-red-400'}>{bgImgRef.current ? '已加载' : '未加载'}</span></div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Right: Canvas & Actions ── */}
+        <div className="flex-1 min-w-0">
+          {/* Canvas */}
+          <div className="bg-gray-900/60 border border-gray-800 rounded-lg p-3 mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-gray-400">预览 ({canvasW} x {canvasH})</span>
+            </div>
+            <div className="flex justify-center overflow-auto">
+              <canvas ref={canvasRef}
+                width={canvasW} height={canvasH}
+                style={{ width: canvasW * displayScale, height: canvasH * displayScale }}
+                className="rounded border border-gray-700/50 shadow-lg"
+              />
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-2 mb-3">
+            <button onClick={() => exportCanvas(1)}
+              className="bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+              📥 导出 PNG
+            </button>
+            <button onClick={() => exportCanvas(2)}
+              className="bg-gradient-to-r from-amber-700 to-amber-600 hover:from-amber-600 hover:to-amber-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+              📥 导出高清 (2x)
+            </button>
+            <button onClick={saveResult}
+              className="bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-medium px-4 py-2 rounded-lg border border-gray-700 transition">
+              💾 保存最终结果
+            </button>
+          </div>
+
+          {/* Quality Check */}
+          <div className="bg-gray-900/60 border border-gray-800 rounded-lg p-3">
+            <div className="text-xs font-medium text-gray-400 mb-2">质量检查</div>
+            {qualityResults.length === 0 ? (
+              <div className="text-xs text-gray-600">等待渲染...</div>
+            ) : (
+              <div className="space-y-1">
+                {qualityResults.map((r, i) => (
+                  <div key={i} className="quality-item">
+                    <span>{r.ok ? '✅' : '⚠️'}</span>
+                    <span className={r.ok ? 'text-gray-400' : 'text-amber-400'}>{r.msg}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Mount ── */
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
 </body>
 </html>

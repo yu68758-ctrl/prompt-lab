@@ -3,21 +3,781 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>文案拆解 — Prompt Lab — Prompt Lab</title>
+<title>Skill 02 - 文案拆解 — Prompt Lab</title>
+<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        accent: { DEFAULT: '#10b981', light: '#34d399', dark: '#059669' },
+        surface: { DEFAULT: '#1e1e2e', light: '#262637', dark: '#12121c' },
+      }
+    }
+  }
+}
+</script>
+<script src="../../shared/config.js"></script>
+<script src="../../shared/store.js"></script>
+<script src="../../shared/api.js"></script>
+<link rel="stylesheet" href="../../style.css">
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#0a0a14; color:#e0e0e0; min-height:100vh; display:flex; align-items:center; justify-content:center; }
-.placeholder { text-align:center; }
-.placeholder .icon { font-size:48px; margin-bottom:16px; }
-.placeholder h2 { font-size:18px; font-weight:600; margin-bottom:8px; }
-.placeholder p { font-size:13px; color:#666; }
+  body { margin: 0; background: #0a0a12; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif; }
+  .editable-field {
+    background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 12px;
+    color: #e0e0e0; font-size: 13px; outline: none; width: 100%; transition: border-color 0.2s; font-family: inherit;
+  }
+  .editable-field:focus { border-color: rgba(16, 185, 129, 0.5); }
+  .section-panel {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 16px; margin-bottom: 12px;
+    backdrop-filter: blur(12px); transition: box-shadow 0.2s;
+  }
+  .section-panel:hover { box-shadow: 0 4px 16px rgba(16,185,129,0.06); }
+  .tag-chip {
+    display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px;
+    border-radius: 6px; font-size: 12px; font-weight: 500;
+  }
+  .json-block {
+    background: #0d0d18; color: #a6e3a1; padding: 16px; border-radius: 10px;
+    font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; font-size: 12px;
+    line-height: 1.6; overflow-x: auto; max-height: 400px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-all; border: 1px solid rgba(255,255,255,0.04);
+  }
+  .btn-green {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white; padding: 10px 24px; border-radius: 10px; font-weight: 600;
+    border: none; cursor: pointer; transition: all 0.2s; font-size: 14px;
+  }
+  .btn-green:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); }
+  .btn-green:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+  .btn-outline {
+    background: transparent; color: #10b981; padding: 8px 18px; border-radius: 8px;
+    font-weight: 600; border: 1.5px solid #10b981; cursor: pointer; transition: all 0.2s; font-size: 13px;
+  }
+  .btn-outline:hover { background: rgba(16, 185, 129, 0.1); }
+  .btn-small {
+    background: rgba(255,255,255,0.06); color: #aaa; padding: 4px 12px; border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.06); cursor: pointer; font-size: 12px; transition: all 0.2s;
+  }
+  .btn-small:hover { background: rgba(255,255,255,0.1); color: #e0e0e0; }
+  .btn-danger-small {
+    background: rgba(239, 68, 68, 0.15); color: #ef4444; padding: 4px 10px; border-radius: 6px;
+    border: none; cursor: pointer; font-size: 12px; transition: all 0.2s;
+  }
+  .btn-danger-small:hover { background: rgba(239, 68, 68, 0.3); }
+  .pulse-loader { display: flex; gap: 6px; align-items: center; }
+  .pulse-loader span {
+    width: 8px; height: 8px; border-radius: 50%; background: #10b981;
+    animation: pulse 1.4s infinite ease-in-out;
+  }
+  .pulse-loader span:nth-child(2) { animation-delay: 0.2s; }
+  .pulse-loader span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pulse {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+  .skill-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(16, 185, 129, 0.15); color: #10b981;
+    padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  }
+  textarea { resize: vertical; min-height: 80px; }
+  .reference-block {
+    background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; padding: 12px;
+    max-height: 200px; overflow-y: auto; font-size: 13px; line-height: 1.6;
+  }
+  .reference-block::-webkit-scrollbar { width: 4px; }
+  .reference-block::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.3); border-radius: 2px; }
+  .toggle-track {
+    width: 40px; height: 22px; border-radius: 11px; cursor: pointer;
+    transition: background 0.2s; position: relative; flex-shrink: 0;
+  }
+  .toggle-track.off { background: #3a3a4a; }
+  .toggle-track.on { background: #10b981; }
+  .toggle-thumb {
+    width: 18px; height: 18px; border-radius: 50%; background: white;
+    position: absolute; top: 2px; transition: left 0.2s;
+  }
+  .toggle-track.off .toggle-thumb { left: 2px; }
+  .toggle-track.on .toggle-thumb { left: 20px; }
+
+  /* Loading overlay */
+  .loading-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px); z-index: 9998;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .loading-card {
+    background: #1a1a2e; border-radius: 16px; padding: 32px 48px;
+    text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .loading-spinner {
+    width: 36px; height: 36px;
+    border: 3px solid rgba(16,185,129,0.2); border-top-color: #10b981;
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+    margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast */
+  .toast-container {
+    position: fixed; top: 20px; right: 20px; z-index: 10000;
+    display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+  }
+  .toast-item {
+    padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 500;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3); animation: slideInRight 0.3s ease;
+    max-width: 360px; border: 1px solid transparent; pointer-events: auto;
+  }
+  .toast-item.success { background: rgba(16,185,129,0.9); border-color: rgba(34,197,94,0.3); color: white; }
+  .toast-item.error { background: rgba(239,68,68,0.9); border-color: rgba(239,68,68,0.3); color: white; }
+  .toast-item.info { background: rgba(99,102,241,0.9); border-color: rgba(99,102,241,0.3); color: white; }
+  @keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  /* Reference tags */
+  .ref-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 8px; font-size: 12px; font-weight: 500;
+    border: 1px solid; margin: 2px;
+  }
+  .ref-tag-purple { background: rgba(99,102,241,0.12); color: #818cf8; border-color: rgba(99,102,241,0.2); }
+  .ref-tag-blue { background: rgba(59,130,246,0.12); color: #60a5fa; border-color: rgba(59,130,246,0.2); }
+  .ref-tag-orange { background: rgba(245,158,11,0.12); color: #fbbf24; border-color: rgba(245,158,11,0.2); }
+  .ref-tag-green { background: rgba(16,185,129,0.12); color: #34d399; border-color: rgba(16,185,129,0.2); }
+  .ref-tag-label { opacity: 0.6; }
 </style>
 </head>
 <body>
-<div class="placeholder">
-  <div class="icon">📝</div>
-  <h2>文案拆解</h2>
-  <p>此 Skill 尚未开发，即将上线 🚀</p>
-</div>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback, useRef, useMemo } = React;
+
+    const isStandalone = window.self === window.top;
+
+    /* ========== System Prompt ========== */
+    const SYSTEM_PROMPT = `你是一个专业的海报文案拆解专家。根据参考图分析结果和原始文案，将文案拆解为结构化组件。
+不得改写用户文案原文，只做结构化拆解。
+输出用 markdown 标题分隔：## 标题 / ## 副标题 / ## 正文 / ## CTA / ## 合规信息 / ## 文案容量分析 / ## 排版建议 / ## 结构化数据（用 \`\`\`json 包裹）`;
+
+    /* ========== Markdown Parser ========== */
+    function parseDecompositionResult(md) {
+      const sections = {};
+      const sectionRegex = /^## (.+)$/gm;
+      const matches = [];
+      let m;
+      while ((m = sectionRegex.exec(md)) !== null) {
+        matches.push({ title: m[1].trim(), index: m.index + m[0].length });
+      }
+      for (let i = 0; i < matches.length; i++) {
+        const start = matches[i].index;
+        const end = i + 1 < matches.length ? matches[i + 1].index : md.length;
+        sections[matches[i].title] = md.slice(start, end).trim();
+      }
+
+      // Parse JSON from structured data section
+      let jsonData = null;
+      const jsonSection = sections['结构化数据'] || '';
+      const jsonMatch = jsonSection.match(/```json\s*([\s\S]*?)```/) || jsonSection.match(/(\{[\s\S]*\})/);
+      if (jsonMatch) {
+        try { jsonData = JSON.parse(jsonMatch[1].trim()); } catch {}
+      }
+
+      // Parse body copy items
+      const bodySection = sections['正文'] || '';
+      const bodyItems = bodySection.split('\n').map(l => l.replace(/^[-*]\s*/, '').replace(/^\d+[.、]\s*/, '').trim()).filter(Boolean);
+
+      return {
+        title: (sections['标题'] || '').replace(/^["'"「」]+|["'"「」]+$/g, '').trim(),
+        subtitle: (sections['副标题'] || '').replace(/^["'"「」]+|["'"「」]+$/g, '').trim(),
+        bodyCopy: bodyItems.length > 0 ? bodyItems : (jsonData?.bodyCopy || []),
+        cta: (sections['CTA'] || '').replace(/^["'"「」]+|["'"「」]+$/g, '').trim(),
+        complianceText: (sections['合规信息'] || '').trim(),
+        capacityAnalysis: sections['文案容量分析'] || '',
+        layoutSuggestions: sections['排版建议'] || '',
+        raw: md,
+        jsonData: jsonData || {
+          title: '', subtitle: '', bodyCopy: [], cta: '',
+          compliance: { required: false, elements: [] },
+          copyCapacity: { maxChars: 50, level: '' }
+        },
+      };
+    }
+
+    /* ========== Toast System (React-based, top-right) ========== */
+    function ToastContainer({ toasts }) {
+      if (!toasts.length) return null;
+      return (
+        <div className="toast-container">
+          {toasts.map(t => (
+            <div key={t.id} className={`toast-item ${t.type}`}>
+              {t.msg}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    /* ========== Loading Overlay ========== */
+    function LoadingOverlay({ show }) {
+      if (!show) return null;
+      return (
+        <div className="loading-overlay">
+          <div className="loading-card">
+            <div className="loading-spinner"></div>
+            <p style={{ color: '#999', fontSize: 14, margin: 0 }}>正在拆解文案，请稍候...</p>
+          </div>
+        </div>
+      );
+    }
+
+    /* ========== Header (standalone only) ========== */
+    function Header() {
+      if (!isStandalone) return null;
+      return (
+        <div style={{
+          background: 'rgba(10,10,18,0.85)', borderBottom: '1px solid rgba(255,255,255,0.06)',
+          padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          backdropFilter: 'blur(12px)', position: 'sticky', top: 0, zIndex: 50,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <a
+              href="../../index.html"
+              style={{ color: '#666', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 4, transition: 'color 0.2s' }}
+              onMouseEnter={e => e.target.style.color = '#aaa'}
+              onMouseLeave={e => e.target.style.color = '#666'}
+            >
+              <span style={{ fontSize: 16 }}>&larr;</span> 返回主页
+            </a>
+            <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)' }}></div>
+            <span className="skill-badge">📝 Skill 02</span>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#fff' }}>文案拆解</span>
+          </div>
+          <button
+            onClick={() => window.parent?.postMessage({type:'open-settings'}, '*')}
+            style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 18 }}
+            title="API 设置"
+          >⚙️</button>
+        </div>
+      );
+    }
+
+    /* ========== Reference Tags from Skill 01 ========== */
+    function Skill01ReferenceTags({ skill01Data }) {
+      if (!skill01Data || !skill01Data.result) return null;
+      const r = skill01Data.result;
+      const tags = [];
+      if (r.posterType) tags.push({ label: '海报类型', value: r.posterType, cls: 'ref-tag-purple' });
+      if (r.styleKeywords) tags.push({ label: '风格', value: typeof r.styleKeywords === 'string' ? r.styleKeywords : JSON.stringify(r.styleKeywords), cls: 'ref-tag-blue' });
+      if (r.colorPalette) tags.push({ label: '配色', value: typeof r.colorPalette === 'string' ? r.colorPalette : JSON.stringify(r.colorPalette), cls: 'ref-tag-orange' });
+      if (r.copyCapacity) tags.push({ label: '文案容量', value: typeof r.copyCapacity === 'string' ? r.copyCapacity : JSON.stringify(r.copyCapacity), cls: 'ref-tag-green' });
+      if (tags.length === 0) return null;
+      return (
+        <div style={{ marginBottom: 12 }}>
+          <p style={{ fontSize: 11, color: '#666', marginBottom: 6, fontWeight: 500, textTransform: 'uppercase', letterSpacing: 1 }}>来自 Skill 01 参考图分析</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {tags.map((t, i) => (
+              <span key={i} className={`ref-tag ${t.cls}`}>
+                <span className="ref-tag-label">{t.label}:</span> {String(t.value).slice(0, 60)}
+              </span>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    /* ========== Reference Panel (full Skill 01 output) ========== */
+    function ReferencePanel({ skill01Data }) {
+      if (!skill01Data || !skill01Data.result) {
+        return (
+          <div style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f59e0b', fontSize: 13, fontWeight: 600 }}>
+              <span>⚠️</span>
+              <span>请先完成 Step 1 参考图反推</span>
+            </div>
+            <p style={{ color: '#888', fontSize: 12, margin: '6px 0 0 22px' }}>
+              Skill 01 的分析结果将作为文案拆解的参考依据
+            </p>
+          </div>
+        );
+      }
+
+      const result = skill01Data.result;
+      const displayText = typeof result === 'string' ? result : (result.raw || result.summary || JSON.stringify(result, null, 2));
+
+      return (
+        <div className="section-panel" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 14 }}>📷</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#10b981' }}>Skill 01 参考图分析结果</span>
+            <span className="tag-chip" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981' }}>只读</span>
+          </div>
+          <Skill01ReferenceTags skill01Data={skill01Data} />
+          <div className="reference-block" style={{ color: '#bbb', whiteSpace: 'pre-wrap' }}>
+            {displayText}
+          </div>
+        </div>
+      );
+    }
+
+    /* ========== Editable Text Field ========== */
+    function EditField({ label, icon, value, onChange, placeholder = '' }) {
+      return (
+        <div style={{ marginBottom: 10 }}>
+          {label && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#888', marginBottom: 4 }}>
+              <span>{icon}</span><span>{label}</span>
+            </label>
+          )}
+          <input
+            className="editable-field"
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            placeholder={placeholder}
+          />
+        </div>
+      );
+    }
+
+    /* ========== Body Copy Editor ========== */
+    function BodyCopyEditor({ items, onChange }) {
+      const updateItem = (i, val) => {
+        const next = [...items]; next[i] = val; onChange(next);
+      };
+      const addItem = () => onChange([...items, '']);
+      const removeItem = (i) => {
+        const next = items.filter((_, idx) => idx !== i);
+        onChange(next.length ? next : ['']);
+      };
+
+      return (
+        <div>
+          {items.map((item, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6, alignItems: 'flex-start' }}>
+              <span style={{ color: '#555', fontSize: 12, minWidth: 20, paddingTop: 10 }}>{i + 1}.</span>
+              <textarea
+                className="editable-field"
+                style={{ flex: 1, minHeight: 40 }}
+                value={item}
+                onChange={e => updateItem(i, e.target.value)}
+                placeholder="正文内容..."
+              />
+              <button className="btn-danger-small" onClick={() => removeItem(i)} style={{ marginTop: 6 }}>删除</button>
+            </div>
+          ))}
+          <button className="btn-small" onClick={addItem} style={{ marginTop: 4 }}>+ 添加条目</button>
+        </div>
+      );
+    }
+
+    /* ========== Compliance Editor ========== */
+    function ComplianceEditor({ text, onChange, jsonData, onJsonChange }) {
+      const required = jsonData?.compliance?.required ?? false;
+      const toggleRequired = () => {
+        onJsonChange({ ...jsonData, compliance: { ...jsonData.compliance, required: !required } });
+      };
+
+      return (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <span style={{ fontSize: 12, color: '#888' }}>是否需要合规信息</span>
+            <div className={`toggle-track ${required ? 'on' : 'off'}`} onClick={toggleRequired}>
+              <div className="toggle-thumb" />
+            </div>
+            <span style={{ fontSize: 12, color: required ? '#10b981' : '#666' }}>{required ? '是' : '否'}</span>
+          </div>
+          <textarea
+            className="editable-field"
+            style={{ minHeight: 60 }}
+            value={text}
+            onChange={e => onChange(e.target.value)}
+            placeholder="合规信息文字（如：活动最终解释权归...）"
+          />
+        </div>
+      );
+    }
+
+    /* ========== Readonly Section ========== */
+    function ReadonlySection({ icon, title, content, color = '#888' }) {
+      if (!content) return null;
+      return (
+        <div className="section-panel">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 14 }}>{icon}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color }}>{title}</span>
+          </div>
+          <div style={{
+            fontSize: 13, color: '#bbb', lineHeight: 1.7, whiteSpace: 'pre-wrap',
+            fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
+            background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 12,
+            maxHeight: 300, overflowY: 'auto', border: '1px solid rgba(255,255,255,0.04)',
+          }}>
+            {content}
+          </div>
+        </div>
+      );
+    }
+
+    /* ========== Main App ========== */
+    function App() {
+      const [rawCopy, setRawCopy] = useState('');
+      const [copyRequirements, setCopyRequirements] = useState('');
+      const [loading, setLoading] = useState(false);
+      const [result, setResult] = useState(null);
+      const [skill01Data, setSkill01Data] = useState(null);
+      const [toasts, setToasts] = useState([]);
+      const toastIdRef = useRef(0);
+
+      // Editable fields derived from result
+      const [editTitle, setEditTitle] = useState('');
+      const [editSubtitle, setEditSubtitle] = useState('');
+      const [editBodyCopy, setEditBodyCopy] = useState([]);
+      const [editCta, setEditCta] = useState('');
+      const [editCompliance, setEditCompliance] = useState('');
+      const [jsonData, setJsonData] = useState(null);
+      const [saved, setSaved] = useState(false);
+
+      /* Toast helper */
+      const addToast = useCallback((msg, type = 'info') => {
+        const id = ++toastIdRef.current;
+        setToasts(prev => [...prev, { id, msg, type }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+      }, []);
+
+      // Load Skill 01 data on mount
+      useEffect(() => {
+        try {
+          const data = PipelineStore.getSkillOutput(1);
+          setSkill01Data(data);
+        } catch (e) {
+          console.warn('[Skill 02] Failed to load Skill 01 data:', e);
+        }
+      }, []);
+
+      // Sync editable fields when result changes
+      useEffect(() => {
+        if (!result) return;
+        setEditTitle(result.title || '');
+        setEditSubtitle(result.subtitle || '');
+        setEditBodyCopy(result.bodyCopy.length ? result.bodyCopy : ['']);
+        setEditCta(result.cta || '');
+        setEditCompliance(result.complianceText || '');
+        setJsonData(result.jsonData || null);
+        setSaved(false);
+      }, [result]);
+
+      // Auto-update JSON when edits change
+      const computedJson = useMemo(() => {
+        if (!jsonData) return null;
+        const complianceRequired = editCompliance.trim().length > 0;
+        return {
+          ...jsonData,
+          title: editTitle,
+          subtitle: editSubtitle,
+          bodyCopy: editBodyCopy,
+          cta: editCta,
+          compliance: {
+            required: complianceRequired || jsonData.compliance?.required || false,
+            elements: complianceRequired ? [editCompliance.trim()] : (jsonData.compliance?.elements || []),
+          },
+        };
+      }, [editTitle, editSubtitle, editBodyCopy, editCta, editCompliance, jsonData]);
+
+      /* Build user prompt */
+      const buildUserPrompt = () => {
+        let prompt = '';
+        const skill01Result = skill01Data?.result;
+        if (skill01Result) {
+          const parts = [];
+          const r = skill01Result;
+          if (r.posterType) parts.push(`海报类型: ${r.posterType}`);
+          if (r.styleKeywords) parts.push(`风格关键词: ${typeof r.styleKeywords === 'string' ? r.styleKeywords : JSON.stringify(r.styleKeywords)}`);
+          if (r.colorPalette) parts.push(`配色方案: ${typeof r.colorPalette === 'string' ? r.colorPalette : JSON.stringify(r.colorPalette)}`);
+          if (r.copyCapacity) parts.push(`文案容量: ${typeof r.copyCapacity === 'string' ? r.copyCapacity : JSON.stringify(r.copyCapacity)}`);
+          if (r.visualAnalysis) parts.push(`视觉分析: ${typeof r.visualAnalysis === 'string' ? r.visualAnalysis.slice(0, 300) : JSON.stringify(r.visualAnalysis).slice(0, 300)}`);
+          if (parts.length) prompt += `【参考图分析结果】\n${parts.join('\n')}\n\n`;
+        }
+        prompt += `【原始文案】\n${rawCopy}\n`;
+        if (copyRequirements.trim()) {
+          prompt += `\n【文案需求】\n${copyRequirements}\n`;
+        }
+        return prompt;
+      };
+
+      /* Call AI */
+      const handleDecompose = async () => {
+        if (!rawCopy.trim()) {
+          addToast('请输入原始文案', 'error');
+          return;
+        }
+        setLoading(true);
+        setResult(null);
+        try {
+          const userPrompt = buildUserPrompt();
+          const response = await PipelineAPI.callAnalysis([
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt },
+          ], { temperature: 0.4, maxTokens: 4096 });
+
+          if (response) {
+            const parsed = parseDecompositionResult(response);
+            setResult(parsed);
+            addToast('文案拆解完成', 'success');
+          }
+        } catch (err) {
+          addToast('拆解失败: ' + err.message, 'error');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      /* Save */
+      const handleSave = () => {
+        const data = {
+          rawCopy,
+          copyRequirements,
+          title: editTitle,
+          subtitle: editSubtitle,
+          bodyCopy: editBodyCopy.filter(Boolean),
+          cta: editCta,
+          complianceText: editCompliance,
+          capacityAnalysis: result?.capacityAnalysis || '',
+          layoutSuggestions: result?.layoutSuggestions || '',
+          jsonData: computedJson,
+          raw: result?.raw || '',
+          savedAt: new Date().toISOString(),
+        };
+        try {
+          PipelineStore.saveSkillOutput(2, data);
+        } catch (e) {
+          console.warn('[Skill 02] Store save failed:', e);
+        }
+        setSaved(true);
+        addToast('💾 结果已保存', 'success');
+
+        // PostMessage for parent
+        try {
+          window.parent.postMessage({ type: 'skill-complete', skill: 2, data }, '*');
+        } catch {}
+      };
+
+      return (
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+          <Header />
+
+          <div style={{
+            flex: 1, padding: isStandalone ? '24px' : '16px',
+            maxWidth: 900, width: '100%', margin: '0 auto', boxSizing: 'border-box',
+          }}>
+
+            {/* Warning if no Skill 01 data */}
+            {!skill01Data?.result && (
+              <div style={{
+                background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)',
+                borderRadius: 10, padding: '12px 16px', marginBottom: 16,
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <span style={{ fontSize: 18 }}>⚠️</span>
+                <div>
+                  <span style={{ color: '#f59e0b', fontSize: 13, fontWeight: 600 }}>未检测到 Skill 01 参考图分析数据</span>
+                  <p style={{ color: '#888', fontSize: 12, margin: '2px 0 0' }}>建议先完成参考图反推，文案拆解将参考其结果</p>
+                </div>
+              </div>
+            )}
+
+            {/* Input Section */}
+            <div className="section-panel" style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                <span style={{ fontSize: 16 }}>📝</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>输入区</span>
+              </div>
+
+              {/* Skill 01 Reference */}
+              <ReferencePanel skill01Data={skill01Data} />
+
+              {/* Raw Copy */}
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#ccc', marginBottom: 6 }}>
+                  原始文案 <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <textarea
+                  className="editable-field"
+                  style={{ minHeight: 120 }}
+                  value={rawCopy}
+                  onChange={e => setRawCopy(e.target.value)}
+                  placeholder="粘贴需要拆解的海报文案..."
+                />
+                {rawCopy && (
+                  <div style={{ fontSize: 11, color: '#555', marginTop: 4, textAlign: 'right' }}>
+                    {rawCopy.length} 字符
+                  </div>
+                )}
+              </div>
+
+              {/* Copy Requirements */}
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#ccc', marginBottom: 6 }}>
+                  文案需求 <span style={{ color: '#666', fontWeight: 400 }}>(可选)</span>
+                </label>
+                <textarea
+                  className="editable-field"
+                  style={{ minHeight: 70 }}
+                  value={copyRequirements}
+                  onChange={e => setCopyRequirements(e.target.value)}
+                  placeholder="额外要求：语气、约束、品牌调性等..."
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button
+                  className="btn-green"
+                  onClick={handleDecompose}
+                  disabled={loading || !rawCopy.trim()}
+                >
+                  {loading ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="pulse-loader"><span></span><span></span><span></span></span>
+                      拆解中...
+                    </span>
+                  ) : '✨ AI 拆解文案'}
+                </button>
+              </div>
+            </div>
+
+            {/* Loading Overlay */}
+            <LoadingOverlay show={loading} />
+
+            {/* Results */}
+            {result && (
+              <div>
+                {/* Title */}
+                <div className="section-panel">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 14 }}>📝</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#10b981' }}>标题</span>
+                  </div>
+                  <EditField label="" icon="" value={editTitle} onChange={setEditTitle} placeholder="主标题..." />
+                </div>
+
+                {/* Subtitle */}
+                <div className="section-panel">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 14 }}>📄</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#10b981' }}>副标题</span>
+                  </div>
+                  <EditField label="" icon="" value={editSubtitle} onChange={setEditSubtitle} placeholder="副标题（可留空）..." />
+                </div>
+
+                {/* Body Copy */}
+                <div className="section-panel">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 14 }}>📋</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#10b981' }}>正文</span>
+                    <span className="tag-chip" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>
+                      {editBodyCopy.filter(Boolean).length} 条
+                    </span>
+                  </div>
+                  <BodyCopyEditor items={editBodyCopy} onChange={setEditBodyCopy} />
+                </div>
+
+                {/* CTA */}
+                <div className="section-panel">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 14 }}>🔘</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#10b981' }}>CTA</span>
+                  </div>
+                  <EditField label="" icon="" value={editCta} onChange={setEditCta} placeholder="行动号召文字..." />
+                </div>
+
+                {/* Compliance */}
+                <div className="section-panel">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 14 }}>⚖️</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#10b981' }}>合规信息</span>
+                  </div>
+                  <ComplianceEditor
+                    text={editCompliance}
+                    onChange={setEditCompliance}
+                    jsonData={computedJson}
+                    onJsonChange={setJsonData}
+                  />
+                </div>
+
+                {/* Capacity Analysis */}
+                <ReadonlySection
+                  icon="📊"
+                  title="文案容量分析"
+                  content={result.capacityAnalysis}
+                  color="#10b981"
+                />
+
+                {/* Layout Suggestions */}
+                <ReadonlySection
+                  icon="💡"
+                  title="排版建议"
+                  content={result.layoutSuggestions}
+                  color="#10b981"
+                />
+
+                {/* JSON Preview */}
+                <div className="section-panel">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 14 }}>📦</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#10b981' }}>结构化 JSON</span>
+                      <span className="tag-chip" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>自动更新</span>
+                    </div>
+                    <button
+                      className="btn-small"
+                      onClick={() => {
+                        navigator.clipboard.writeText(JSON.stringify(computedJson, null, 2));
+                        addToast('JSON 已复制', 'info');
+                      }}
+                    >复制</button>
+                  </div>
+                  <pre className="json-block">{JSON.stringify(computedJson, null, 2)}</pre>
+                </div>
+
+                {/* Save button */}
+                <div style={{ display: 'flex', gap: 10, marginTop: 20, flexWrap: 'wrap' }}>
+                  <button
+                    className="btn-green"
+                    onClick={handleSave}
+                    style={saved ? { background: 'rgba(16,185,129,0.3)', boxShadow: 'none', transform: 'none' } : {}}
+                  >
+                    {saved ? '✓ 已保存' : '💾 保存结果'}
+                  </button>
+                  <button
+                    className="btn-outline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(result?.raw || '');
+                      addToast('原始响应已复制', 'info');
+                    }}
+                  >
+                    📋 复制原始响应
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Toast container */}
+          <ToastContainer toasts={toasts} />
+        </div>
+      );
+    }
+
+    /* ========== Mount ========== */
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
 </body>
 </html>
