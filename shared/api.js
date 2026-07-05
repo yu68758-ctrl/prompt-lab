@@ -126,6 +126,17 @@ class PipelineAPI {
       reader.readAsDataURL(blob);
     });
   }
+
+  // ---- 辅助：Toast 通知 ----
+  toast(msg, type = 'info') {
+    const el = document.createElement('div');
+    const bg = type === 'error' ? 'rgba(239,68,68,0.9)' : type === 'success' ? 'rgba(34,197,94,0.9)' : 'rgba(99,102,241,0.9)';
+    el.style.cssText = `position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:500;z-index:99999;pointer-events:none;opacity:0;transition:opacity .3s;background:${bg};color:#fff;box-shadow:0 4px 16px rgba(0,0,0,.3);max-width:360px;`;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.style.opacity = '1');
+    setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 2500);
+  }
 }
 
 // 全局单例

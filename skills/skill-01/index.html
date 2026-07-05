@@ -537,8 +537,8 @@ function App() {
   useEffect(() => {
     const handler = (e) => {
       if (e.data?.type === 'pl-init' && e.data.config) {
-        if (window.PromptLabConfig) {
-          PromptLabConfig.set(e.data.config);
+        if (window.PipelineConfig) {
+          PipelineConfig.save(e.data.config);
         }
       }
     };
@@ -598,7 +598,14 @@ function App() {
     const userText = buildUserText();
     const imageUrls = images.map(img => img.base64);
 
-    const result = await PipelineAPI.multimodal(SYSTEM_PROMPT, userText, imageUrls);
+    // Build multimodal messages
+    const content = [{ type: 'text', text: userText }];
+    imageUrls.forEach(url => content.push({ type: 'image_url', image_url: { url } }));
+    const messages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content }
+    ];
+    const result = await PipelineAPI.callAnalysis(messages);
 
     if (result) {
       setRawMarkdown(result);
@@ -634,7 +641,13 @@ function App() {
     const userText = buildUserText();
     const imageUrls = images.map(img => img.base64);
 
-    const result = await PipelineAPI.multimodal(focusedSystem, userText, imageUrls);
+    const content2 = [{ type: 'text', text: userText }];
+    imageUrls.forEach(url => content2.push({ type: 'image_url', image_url: { url } }));
+    const messages2 = [
+      { role: 'system', content: focusedSystem },
+      { role: 'user', content: content2 }
+    ];
+    const result = await PipelineAPI.callAnalysis(messages2);
 
     if (result) {
       if (sectionKey === 'json') {
@@ -713,9 +726,9 @@ function App() {
       savedAt: Date.now(),
     };
 
-    // Save to PromptLabStore
-    if (window.PromptLabStore) {
-      PromptLabStore.setStepData('skill-01', { result: data });
+    // Save to PipelineStore
+    if (window.PipelineStore) {
+      PipelineStore.saveSkillOutput(1, data);
     }
 
     // PostMessage to parent (dashboard iframe)
@@ -772,7 +785,7 @@ function App() {
             }}>Skill 01</span>
           </div>
           <button
-            onClick={() => PromptLabConfig.renderSettingsModal()}
+            onClick={() => window.parent?.postMessage({type:'open-settings'}, '*')}
             style={{
               background:'rgba(255,255,255,.15)', border:'1px solid rgba(255,255,255,.2)',
               borderRadius:'8px', padding:'6px 14px', color:'#fff', fontSize:'13px',

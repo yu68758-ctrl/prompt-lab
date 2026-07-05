@@ -173,45 +173,40 @@
     }
 
     /* ─── Settings Panel ─── */
-    function SettingsPanel({ open, onClose }) {
-      const [config, setConfig] = useState(null);
+    const SETTINGS_KEY = 'poster_pipeline_config_v2';
+    const DEFAULT_SETTINGS = {
+      apis: {
+        analysis: { name: '分析模型', endpoint: 'https://xinyuanai666.com/v1/chat/completions', model: 'gpt-4o', apiKey: '' },
+        imageGen: { name: '生图模型', endpoint: 'https://xinyuanai666.com/v1/images/generations', model: 'gpt-image-2', apiKey: '' },
+        imageEdit: { name: '图生图模型', endpoint: 'https://xinyuanai666.com/v1/images/edits', model: 'gpt-image-2', apiKey: '' },
+      }
+    };
+    function loadSettings() {
+      try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; }
+      catch { return JSON.parse(JSON.stringify(DEFAULT_SETTINGS)); }
+    }
+    function saveSettings(cfg) { localStorage.setItem(SETTINGS_KEY, JSON.stringify(cfg)); }
 
-      useEffect(() => {
-        if (open && window.PipelineConfig) {
-          setConfig(JSON.parse(JSON.stringify(window.PipelineConfig.getAll())));
-        }
-      }, [open]);
+    function SettingsPanel({ open, onClose }) {
+      const [config, setConfig] = useState(() => loadSettings());
+
+      useEffect(() => { if (open) setConfig(loadSettings()); }, [open]);
 
       const handleChange = (section, field, value) => {
         setConfig(prev => ({
           ...prev,
-          apis: {
-            ...prev.apis,
-            [section]: { ...prev.apis[section], [field]: value },
-          },
+          apis: { ...prev.apis, [section]: { ...prev.apis[section], [field]: value } },
         }));
       };
 
-      const handleSave = () => {
-        if (window.PipelineConfig) {
-          window.PipelineConfig.save(config);
-        }
-        onClose();
-      };
-
-      const handleReset = () => {
-        if (window.PipelineConfig) {
-          window.PipelineConfig.reset();
-          setConfig(JSON.parse(JSON.stringify(window.PipelineConfig.getAll())));
-        }
-      };
+      const handleSave = () => { saveSettings(config); onClose(); };
+      const handleReset = () => { const def = JSON.parse(JSON.stringify(DEFAULT_SETTINGS)); setConfig(def); saveSettings(def); };
 
       const sections = [
         { key: 'analysis', label: '分析模型', icon: '🧠' },
         { key: 'imageGen', label: '生图模型', icon: '🎨' },
         { key: 'imageEdit', label: '图生图模型', icon: '🖼️' },
       ];
-
       const fields = [
         { key: 'name', label: '名称', placeholder: '模型显示名称' },
         { key: 'endpoint', label: 'Endpoint', placeholder: 'API 地址' },
@@ -487,8 +482,8 @@
       useEffect(() => {
         if (window.PipelineStore) {
           const project = window.PipelineStore.getProject();
-          if (project && project.stepStatus) {
-            setStepStatus(project.stepStatus);
+          if (project && project.steps) {
+            setStepStatus(project.steps.map(s => s.completed));
           }
         }
       }, []);
@@ -500,14 +495,14 @@
             setStepStatus(prev => {
               const next = [...prev];
               next[msg.skill - 1] = true;
-              if (window.PipelineStore) {
-                window.PipelineStore.setProject({ stepStatus: next });
-              }
               return next;
             });
             if (msg.data && window.PipelineStore) {
-              window.PipelineStore.setProject({ [`skill${msg.skill}Data`]: msg.data });
+              window.PipelineStore.saveSkillOutput(msg.skill, msg.data);
             }
+          }
+          if (msg && msg.type === 'open-settings') {
+            setShowSettings(true);
           }
         };
         window.addEventListener('message', handler);
