@@ -322,7 +322,7 @@ function UploadZone({ images, onAdd, onRemove }) {
   const handleFiles = useCallback((files) => {
     const valid = Array.from(files).filter(f => f.type.startsWith('image/'));
     if (images.length + valid.length > 4) {
-      if (window.PromptLabAPI) PromptLabAPI.toast('最多上传 4 张参考图', 'error');
+      if (window.PipelineAPI) PipelineAPI.toast('最多上传 4 张参考图', 'error');
       return;
     }
     onAdd(valid);
@@ -598,7 +598,7 @@ function App() {
     const userText = buildUserText();
     const imageUrls = images.map(img => img.base64);
 
-    const result = await PromptLabAPI.multimodal(SYSTEM_PROMPT, userText, imageUrls);
+    const result = await PipelineAPI.multimodal(SYSTEM_PROMPT, userText, imageUrls);
 
     if (result) {
       setRawMarkdown(result);
@@ -634,7 +634,7 @@ function App() {
     const userText = buildUserText();
     const imageUrls = images.map(img => img.base64);
 
-    const result = await PromptLabAPI.multimodal(focusedSystem, userText, imageUrls);
+    const result = await PipelineAPI.multimodal(focusedSystem, userText, imageUrls);
 
     if (result) {
       if (sectionKey === 'json') {
