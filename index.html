@@ -174,9 +174,10 @@
 
     /* ─── Settings Panel ─── */
     const SETTINGS_KEY = 'poster_pipeline_config_v2';
+    const MIMO_KEY = 'tp-ccsj3m8upw60sq80nhm1g7oovtn55opuf3o2ex6no0b1obib';
     const DEFAULT_SETTINGS = {
       apis: {
-        analysis: { name: '分析模型', endpoint: 'https://xinyuanai666.com/v1/chat/completions', model: 'gpt-4o', apiKey: '' },
+        analysis: { name: '分析模型 (MiMo)', endpoint: 'https://token-plan-cn.xiaomimimo.com/v1/chat/completions', model: 'mimo-v2.5', apiKey: MIMO_KEY },
         imageGen: { name: '生图模型', endpoint: 'https://xinyuanai666.com/v1/images/generations', model: 'gpt-image-2', apiKey: '' },
         imageEdit: { name: '图生图模型', endpoint: 'https://xinyuanai666.com/v1/images/edits', model: 'gpt-image-2', apiKey: '' },
       }
