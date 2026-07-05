@@ -4,13 +4,26 @@
 
 class PipelineAPI {
   constructor() {
-    this.config = window.PipelineConfig;
+    this._settingsKey = 'poster\u2026g_v2';
+  }
+
+  _getConfig() {
+    try {
+      const raw = localStorage.getItem(this._settingsKey);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return { apis: {} };
+  }
+
+  _getApi(name) {
+    const cfg = this._getConfig();
+    return cfg.apis?.[name] || {};
   }
 
   // ---- 分析模型调用（文本/图片理解）----
   async callAnalysis(messages, options = {}) {
-    const api = this.config.getApiConfig('analysis');
-    if (!api.apiKey) throw new Error('请先配置分析模型的 API Key');
+    const api = this._getApi('analysis');
+    if (!api.apiKey) throw new Error('请先在设置面板配置分析模型的 API Key');
 
     const body = {
       model: options.model || api.model,
@@ -39,8 +52,8 @@ class PipelineAPI {
 
   // ---- 生图模型调用（文生图）----
   async callImageGen(prompt, options = {}) {
-    const api = this.config.getApiConfig('imageGen');
-    if (!api.apiKey) throw new Error('请先配置生图模型的 API Key');
+    const api = this._getApi('imageGen');
+    if (!api.apiKey) throw new Error('请先在设置面板配置生图模型的 API Key');
 
     const body = {
       model: options.model || api.model,
@@ -70,8 +83,8 @@ class PipelineAPI {
 
   // ---- 图生图模型调用（编辑/融合）----
   async callImageEdit(prompt, imageFiles, options = {}) {
-    const api = this.config.getApiConfig('imageEdit');
-    if (!api.apiKey) throw new Error('请先配置图生图模型的 API Key');
+    const api = this._getApi('imageEdit');
+    if (!api.apiKey) throw new Error('请先在设置面板配置图生图模型的 API Key');
 
     const formData = new FormData();
     formData.append('model', options.model || api.model);
