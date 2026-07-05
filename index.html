@@ -1,547 +1,719 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>参考图反推工具</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0f0f0f;color:#e0e0e0;min-height:100vh}
-.container{max-width:960px;margin:0 auto;padding:24px 16px}
-h1{font-size:20px;font-weight:600;color:#fff;margin-bottom:4px}
-.subtitle{font-size:13px;color:#888;margin-bottom:24px}
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prompt Lab - AI Poster Pipeline</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'pl-bg': '#0a0a12',
+            'pl-surface': '#12121e',
+            'pl-border': '#1e1e30',
+            'pl-text': '#e2e2f0',
+            'pl-muted': '#8888a0',
+            'pl-accent-start': '#6366f1',
+            'pl-accent-end': '#8b5cf6',
+          },
+          fontFamily: {
+            sans: ['"Inter"', '"Noto Sans SC"', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap');
 
-/* Upload */
-.upload-zone{border:2px dashed #333;border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;margin-bottom:20px}
-.upload-zone:hover,.upload-zone.dragover{border-color:#666;background:#1a1a1a}
-.upload-zone p{color:#888;font-size:14px}
-.upload-zone .icon{font-size:36px;margin-bottom:8px}
-.preview-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
-.preview-item{position:relative;width:120px;height:90px;border-radius:8px;overflow:hidden;border:1px solid #333}
-.preview-item img{width:100%;height:100%;object-fit:cover}
-.preview-item .remove{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.7);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:12px;line-height:20px;text-align:center}
+    body {
+      margin: 0;
+      padding: 0;
+      background: #0a0a12;
+      color: #e2e2f0;
+      font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
+      overflow: hidden;
+    }
 
-/* Form */
-.field{margin-bottom:16px}
-.field label{display:block;font-size:13px;color:#aaa;margin-bottom:6px;font-weight:500}
-.field select,.field textarea{width:100%;background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:10px 12px;color:#e0e0e0;font-size:14px;font-family:inherit;resize:vertical}
-.field textarea{min-height:80px}
-.field select:focus,.field textarea:focus{outline:none;border-color:#555}
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2a2a40; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3a55; }
 
-/* API Config */
-.api-config{background:#1a1a1a;border-radius:10px;padding:16px;margin-bottom:20px}
-.api-config summary{cursor:pointer;font-size:13px;color:#888;font-weight:500}
-.api-config .fields{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
-.api-config input{width:100%;background:#0f0f0f;border:1px solid #333;border-radius:6px;padding:8px 10px;color:#e0e0e0;font-size:13px;font-family:monospace}
-.api-config input:focus{outline:none;border-color:#555}
-.api-config .hint{font-size:11px;color:#666;margin-top:4px}
+    .panel-overlay {
+      transition: opacity 0.3s ease;
+    }
+    .panel-slide-right {
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .panel-slide-left {
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
 
-/* Button */
-.btn{background:#fff;color:#000;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s}
-.btn:hover{opacity:.85}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.btn-row{display:flex;gap:10px;align-items:center;margin-bottom:24px}
-.btn-secondary{background:#2a2a2a;color:#ccc}
+    .workspace-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #0a0a12;
+    }
 
-/* Loading */
-.loading{display:none;text-align:center;padding:40px}
-.loading.show{display:block}
-.spinner{width:32px;height:32px;border:3px solid #333;border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;margin:0 auto 12px}
-@keyframes spin{to{transform:rotate(360deg)}}
-.loading p{color:#888;font-size:13px}
-.section-loading{display:none;text-align:center;padding:20px;font-size:13px;color:#888}
-.section-loading.show{display:block}
-.section-loading .spinner{width:20px;height:20px;border-width:2px;margin:0 auto 8px}
+    @keyframes pulse-ring {
+      0% { transform: scale(1); opacity: 0.6; }
+      100% { transform: scale(1.8); opacity: 0; }
+    }
+    .step-active-pulse::before {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 50%;
+      border: 2px solid currentColor;
+      animation: pulse-ring 1.5s ease-out infinite;
+    }
 
-/* Results */
-.results{display:none}
-.results.show{display:block}
-.section{background:#1a1a1a;border-radius:10px;padding:16px;margin-bottom:12px}
-.section-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
-.section-title{font-size:14px;font-weight:600;color:#ccc}
-.section-actions{display:flex;gap:6px}
-.btn-sm{background:#2a2a2a;color:#aaa;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer}
-.btn-sm:hover{background:#333;color:#fff}
-.section-content{font-size:13px;color:#bbb;line-height:1.7;white-space:pre-wrap;font-family:monospace;background:#0f0f0f;border-radius:8px;padding:12px;max-height:300px;overflow-y:auto}
-.section-content.editable:focus{outline:1px solid #555}
+    .data-preview pre {
+      background: #12121e;
+      border: 1px solid #1e1e30;
+      border-radius: 8px;
+      padding: 16px;
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #a5b4fc;
+      max-height: 280px;
+    }
 
-/* JSON */
-.json-block{position:relative}
-.json-block pre{font-size:12px;color:#aaa;background:#0f0f0f;border-radius:8px;padding:12px;max-height:400px;overflow:auto;white-space:pre-wrap;word-break:break-all}
-.copy-btn{position:absolute;top:8px;right:8px}
-
-/* Toast */
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none}
-.toast.show{opacity:1}
-</style>
+    @media (max-width: 768px) {
+      .desktop-sidebar { display: none !important; }
+      .mobile-topbar { display: flex !important; }
+    }
+    @media (min-width: 769px) {
+      .mobile-topbar { display: none !important; }
+    }
+  </style>
+  <script src="shared/config.js"></script>
+  <script src="shared/store.js"></script>
+  <script src="shared/api.js"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
-<div class="container">
-<h1>🎨 参考图反推工具</h1>
-<p class="subtitle">上传参考图 → 分析创意 → 生成结构化 Prompt</p>
+  <div id="root"></div>
 
-<!-- API Config -->
-<details class="api-config">
-<summary>⚙️ API 配置</summary>
-<div class="fields">
-<div>
-<label>API Base URL</label>
-<input id="apiBase" value="https://token-plan-cn.xiaomimimo.com/v1" placeholder="https://api.example.com/v1">
-</div>
-<div>
-<label>Model</label>
-<input id="apiModel" value="mimo-v2.5" placeholder="model-name">
-</div>
-<div style="grid-column:1/-1">
-<label>API Key</label>
-<input id="apiKey" type="password" placeholder="sk-...">
-<p class="hint">Key 仅在浏览器本地使用，不会发送到第三方服务器</p>
-</div>
-</div>
-</details>
+  <script type="text/babel" data-type="module">
+    const { useState, useEffect, useRef, useCallback } = React;
 
-<!-- Upload -->
-<div class="upload-zone" id="uploadZone">
-<div class="icon">📷</div>
-<p>拖拽图片到这里，或点击上传（1~4张）</p>
-<input type="file" id="fileInput" accept="image/*" multiple hidden>
-</div>
-<div class="preview-row" id="previewRow"></div>
+    const STEPS = [
+      { num: 1, name: '参考图反推', icon: '🔍', desc: '上传参考图，分析风格与创意', color: '#818cf8' },
+      { num: 2, name: '文案拆解', icon: '✍️', desc: '拆解标题、正文、CTA', color: '#34d399' },
+      { num: 3, name: 'Prompt 构建', icon: '🧩', desc: '生成生图 Prompt 组合', color: '#60a5fa' },
+      { num: 4, name: '生图执行', icon: '🎨', desc: '调用 API 生成海报底图', color: '#f472b6' },
+      { num: 5, name: '排版合成', icon: '📐', desc: '文字渲染 + 最终导出', color: '#fbbf24' },
+    ];
 
-<!-- Requirements -->
-<div class="field">
-<label>海报类型</label>
-<select id="posterType">
-<option value="atmosphere_screen">氛围感投屏</option>
-<option value="weekly_broadcast">每周播报</option>
-<option value="interactive_topic">互动话题</option>
-<option value="other">其他</option>
-</select>
-</div>
-<div class="field">
-<label>尺寸需求</label>
-<select id="sizeNeed">
-<option value="both">横版 A4 + 16:9</option>
-<option value="a4">仅横版 A4</option>
-<option value="169">仅 16:9</option>
-</select>
-</div>
-<div class="field">
-<label>需求描述 / 文案 / 风格要求</label>
-<textarea id="userGoal" placeholder="例如：夏日明信片氛围感海报，大标题+副标题，风格偏轻松可爱"></textarea>
-</div>
+    /* ─── Sidebar Step Item ─── */
+    function StepItem({ step, active, completed, onClick }) {
+      return (
+        <button
+          onClick={() => onClick(step.num)}
+          className={`
+            relative flex items-center gap-3 w-full px-3 py-3 rounded-xl text-left
+            transition-all duration-200 group cursor-pointer
+            ${active
+              ? 'bg-white/5 shadow-lg shadow-purple-500/5'
+              : 'hover:bg-white/[0.03]'
+            }
+          `}
+        >
+          <div className="relative flex-shrink-0">
+            <div
+              className={`
+                w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold
+                transition-all duration-200
+                ${completed
+                  ? 'bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-lg shadow-purple-500/30'
+                  : active
+                    ? 'border-2 text-white'
+                    : 'border border-pl-border text-pl-muted group-hover:border-gray-600'
+                }
+              `}
+              style={active ? { borderColor: step.color, color: step.color } : {}}
+            >
+              {completed ? '✓' : step.icon}
+            </div>
+            {active && (
+              <div
+                className="absolute -inset-1 rounded-full opacity-20 blur-sm"
+                style={{ background: step.color }}
+              />
+            )}
+          </div>
 
-<div class="btn-row">
-<button class="btn" id="genBtn" disabled>✨ 生成分析</button>
-<button class="btn btn-secondary" id="clearBtn">清空</button>
-</div>
+          <div className="min-w-0">
+            <div className={`text-sm font-medium truncate ${active ? 'text-white' : 'text-pl-muted group-hover:text-pl-text'}`}>
+              <span className="text-xs mr-1.5 opacity-50">{step.num}.</span>
+              {step.name}
+            </div>
+            <div className={`text-xs truncate mt-0.5 ${active ? 'opacity-60' : 'opacity-0 group-hover:opacity-40'} transition-opacity`}>
+              {step.desc}
+            </div>
+          </div>
 
-<!-- Loading -->
-<div class="loading" id="loading">
-<div class="spinner"></div>
-<p>正在分析参考图，请稍候...</p>
-</div>
+          {active && (
+            <div
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-full"
+              style={{ background: step.color }}
+            />
+          )}
+        </button>
+      );
+    }
 
-<!-- Results -->
-<div class="results" id="results">
-<div class="section">
-<div class="section-header">
-<span class="section-title">📋 海报类型判断</span>
-<div class="section-actions">
-<button class="btn-sm" onclick="regen('type')">重新生成</button>
-</div>
-</div>
-<div class="section-loading" id="loadType"><div class="spinner"></div>正在生成...</div>
-<div class="section-content" id="outType" tabindex="0"></div>
-</div>
+    /* ─── Settings Panel ─── */
+    function SettingsPanel({ open, onClose }) {
+      const [config, setConfig] = useState(null);
 
-<div class="section">
-<div class="section-header">
-<span class="section-title">📊 文案容量分析</span>
-<div class="section-actions">
-<button class="btn-sm" onclick="regen('copy')">重新生成</button>
-</div>
-</div>
-<div class="section-loading" id="loadCopy"><div class="spinner"></div>正在生成...</div>
-<div class="section-content" id="outCopy" tabindex="0"></div>
-</div>
+      useEffect(() => {
+        if (open && window.PipelineConfig) {
+          setConfig(JSON.parse(JSON.stringify(window.PipelineConfig.getAll())));
+        }
+      }, [open]);
 
-<div class="section">
-<div class="section-header">
-<span class="section-title">🎨 视觉分析</span>
-<div class="section-actions">
-<button class="btn-sm" onclick="regen('visual')">重新生成</button>
-</div>
-</div>
-<div class="section-loading" id="loadVisual"><div class="spinner"></div>正在生成...</div>
-<div class="section-content" id="outVisual" tabindex="0"></div>
-</div>
+      const handleChange = (section, field, value) => {
+        setConfig(prev => ({
+          ...prev,
+          [section]: { ...prev[section], [field]: value },
+        }));
+      };
 
-<div class="section">
-<div class="section-header">
-<span class="section-title">🔤 文字视觉解析</span>
-<div class="section-actions">
-<button class="btn-sm" onclick="regen('typo')">重新生成</button>
-</div>
-</div>
-<div class="section-loading" id="loadTypo"><div class="spinner"></div>正在生成...</div>
-<div class="section-content" id="outTypo" tabindex="0"></div>
-</div>
+      const handleSave = () => {
+        if (window.PipelineConfig) {
+          window.PipelineConfig.save(config);
+        }
+        onClose();
+      };
 
-<div class="section">
-<div class="section-header">
-<span class="section-title">✨ 横版 A4 Prompt</span>
-<div class="section-actions">
-<button class="btn-sm" onclick="regen('a4')">重新生成</button>
-<button class="btn-sm" onclick="copySection('a4')">复制</button>
-</div>
-</div>
-<div class="section-loading" id="loadA4"><div class="spinner"></div>正在生成...</div>
-<div class="section-content" id="outA4" tabindex="0"></div>
-</div>
+      const handleReset = () => {
+        if (window.PipelineConfig) {
+          window.PipelineConfig.reset();
+          setConfig(JSON.parse(JSON.stringify(window.PipelineConfig.getAll())));
+        }
+      };
 
-<div class="section">
-<div class="section-header">
-<span class="section-title">🖥️ 16:9 投屏 Prompt</span>
-<div class="section-actions">
-<button class="btn-sm" onclick="regen('169')">重新生成</button>
-<button class="btn-sm" onclick="copySection('169')">复制</button>
-</div>
-</div>
-<div class="section-loading" id="load169"><div class="spinner"></div>正在生成...</div>
-<div class="section-content" id="out169" tabindex="0"></div>
-</div>
+      const sections = [
+        { key: 'analysis', label: '分析模型', icon: '🧠' },
+        { key: 'imageGen', label: '生图模型', icon: '🎨' },
+        { key: 'imageToImage', label: '图生图模型', icon: '🖼️' },
+      ];
 
-<div class="section">
-<div class="section-header">
-<span class="section-title">🎭 风格 Prompt</span>
-<div class="section-actions">
-<button class="btn-sm" onclick="regen('style')">重新生成</button>
-<button class="btn-sm" onclick="copySection('style')">复制</button>
-</div>
-</div>
-<div class="section-loading" id="loadStyle"><div class="spinner"></div>正在生成...</div>
-<div class="section-content" id="outStyle" tabindex="0"></div>
-</div>
+      const fields = [
+        { key: 'name', label: '名称', placeholder: '模型显示名称' },
+        { key: 'endpoint', label: 'Endpoint', placeholder: 'API 地址' },
+        { key: 'model', label: 'Model', placeholder: '模型标识' },
+        { key: 'apiKey', label: 'API Key', placeholder: '密钥', type: 'password' },
+      ];
 
-<div class="section">
-<div class="section-header">
-<span class="section-title">🚫 负面 Prompt</span>
-<div class="section-actions">
-<button class="btn-sm" onclick="regen('neg')">重新生成</button>
-<button class="btn-sm" onclick="copySection('neg')">复制</button>
-</div>
-</div>
-<div class="section-loading" id="loadNeg"><div class="spinner"></div>正在生成...</div>
-<div class="section-content" id="outNeg" tabindex="0"></div>
-</div>
+      return (
+        <>
+          {open && (
+            <div
+              className="panel-overlay fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+              onClick={onClose}
+            />
+          )}
+          <div
+            className={`
+              panel-slide-right fixed top-0 right-0 h-full w-full max-w-md z-50
+              bg-pl-surface border-l border-pl-border shadow-2xl
+              flex flex-col
+              ${open ? 'translate-x-0' : 'translate-x-full'}
+            `}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-pl-border">
+              <h2 className="text-lg font-semibold">⚙️ 设置</h2>
+              <button
+                onClick={onClose}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/5 transition-colors text-pl-muted hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
 
-<div class="section">
-<div class="section-header">
-<span class="section-title">📦 结构化 JSON</span>
-<div class="section-actions">
-<button class="btn-sm" onclick="copySection('json')">复制</button>
-</div>
-</div>
-<div class="section-content json-block"><pre id="outJson"></pre></div>
-</div>
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+              {config && sections.map(sec => (
+                <div key={sec.key} className="space-y-3">
+                  <h3 className="text-sm font-semibold text-pl-muted uppercase tracking-wider flex items-center gap-2">
+                    <span>{sec.icon}</span>
+                    {sec.label}
+                  </h3>
+                  <div className="space-y-2.5">
+                    {fields.map(f => (
+                      <div key={f.key}>
+                        <label className="text-xs text-pl-muted mb-1 block">{f.label}</label>
+                        <input
+                          type={f.type || 'text'}
+                          value={config[sec.key]?.[f.key] || ''}
+                          onChange={e => handleChange(sec.key, f.key, e.target.value)}
+                          placeholder={f.placeholder}
+                          className="
+                            w-full px-3 py-2 bg-pl-bg border border-pl-border rounded-lg
+                            text-sm text-pl-text placeholder-pl-muted/40
+                            focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20
+                            transition-colors
+                          "
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
 
-<div class="btn-row" style="margin-top:16px">
-<button class="btn" onclick="copyAll()">📋 复制全部 Prompt</button>
-<button class="btn btn-secondary" onclick="exportJson()">💾 导出 JSON</button>
-</div>
-</div>
-</div>
+            <div className="px-6 py-4 border-t border-pl-border flex gap-3">
+              <button
+                onClick={handleReset}
+                className="
+                  flex-1 px-4 py-2.5 rounded-lg border border-pl-border text-sm font-medium
+                  text-pl-muted hover:text-white hover:border-gray-600 transition-colors
+                "
+              >
+                恢复默认
+              </button>
+              <button
+                onClick={handleSave}
+                className="
+                  flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold text-white
+                  bg-gradient-to-r from-indigo-500 to-purple-500
+                  hover:from-indigo-400 hover:to-purple-400
+                  shadow-lg shadow-purple-500/20 transition-all
+                "
+              >
+                保存设置
+              </button>
+            </div>
+          </div>
+        </>
+      );
+    }
 
-<div class="toast" id="toast"></div>
+    /* ─── History Panel ─── */
+    function HistoryPanel({ open, onClose, onLoad }) {
+      const [history, setHistory] = useState([]);
 
-<script>
-const $ = s => document.querySelector(s);
-const uploadZone = $('#uploadZone');
-const fileInput = $('#fileInput');
-const previewRow = $('#previewRow');
-const genBtn = $('#genBtn');
-const loading = $('#loading');
-const results = $('#results');
-let uploadedFiles = [];
+      useEffect(() => {
+        if (open && window.PipelineStore) {
+          setHistory(window.PipelineStore.getHistory() || []);
+        }
+      }, [open]);
 
-// Upload handling
-uploadZone.addEventListener('click', () => fileInput.click());
-uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
-uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
-uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
-fileInput.addEventListener('change', e => handleFiles(e.target.files));
+      const handleSaveCurrent = () => {
+        if (window.PipelineStore) {
+          window.PipelineStore.saveToHistory();
+          setHistory(window.PipelineStore.getHistory() || []);
+        }
+      };
 
-function handleFiles(files) {
-  const max = 4 - uploadedFiles.length;
-  const toAdd = [...files].slice(0, max);
-  toAdd.forEach(f => {
-    if (!f.type.startsWith('image/')) return;
-    uploadedFiles.push(f);
-    const reader = new FileReader();
-    reader.onload = e => {
-      const div = document.createElement('div');
-      div.className = 'preview-item';
-      div.innerHTML = `<img src="${e.target.result}"><button class="remove" onclick="removeImg(this,${uploadedFiles.length-1})">×</button>`;
-      previewRow.appendChild(div);
-    };
-    reader.readAsDataURL(f);
-  });
-  genBtn.disabled = uploadedFiles.length === 0;
-}
+      const handleLoad = (item) => {
+        if (window.PipelineStore) {
+          window.PipelineStore.loadFromHistory(item.id);
+        }
+        onLoad();
+        onClose();
+      };
 
-function removeImg(btn, idx) {
-  uploadedFiles.splice(idx, 1);
-  btn.parentElement.remove();
-  genBtn.disabled = uploadedFiles.length === 0;
-}
+      const handleDelete = (id, e) => {
+        e.stopPropagation();
+        if (window.PipelineStore) {
+          window.PipelineStore.deleteHistory(id);
+          setHistory(window.PipelineStore.getHistory() || []);
+        }
+      };
 
-$('#clearBtn').addEventListener('click', () => {
-  uploadedFiles = [];
-  previewRow.innerHTML = '';
-  results.classList.remove('show');
-  genBtn.disabled = true;
-  fileInput.value = '';
-});
+      const formatTime = (ts) => {
+        try {
+          const d = new Date(ts);
+          return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        } catch { return ts; }
+      };
 
-// API call
-const SYSTEM_PROMPT = `你是一个面向海报生产流程的参考图反推与创意分析技能。
+      return (
+        <>
+          {open && (
+            <div
+              className="panel-overlay fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+              onClick={onClose}
+            />
+          )}
+          <div
+            className={`
+              panel-slide-left fixed top-0 left-0 h-full w-full max-w-sm z-50
+              bg-pl-surface border-r border-pl-border shadow-2xl
+              flex flex-col
+              ${open ? 'translate-x-0' : '-translate-x-full'}
+            `}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-pl-border">
+              <h2 className="text-lg font-semibold">📋 历史记录</h2>
+              <button
+                onClick={onClose}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/5 transition-colors text-pl-muted hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
 
-核心规则：
-1. 不得改写用户文案，只能做容量和适配判断
-2. 默认不在生图 prompt 中生成真实文字
-3. 先判断海报类型，再反推 prompt
-4. 必须输出双尺寸 prompt（横版 A4 + 16:9）
-5. 提炼参考图创意逻辑，不是表面风格词
-6. 输出中文说明 + 可用 prompt
+            <div className="px-6 py-3 border-b border-pl-border">
+              <button
+                onClick={handleSaveCurrent}
+                className="
+                  w-full px-4 py-2.5 rounded-lg text-sm font-medium
+                  bg-white/5 hover:bg-white/10 border border-pl-border
+                  text-pl-text transition-colors flex items-center justify-center gap-2
+                "
+              >
+                <span>💾</span> 保存当前项目
+              </button>
+            </div>
 
-输出格式要求（严格按以下结构，用 markdown 标题分隔）：
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+              {history.length === 0 && (
+                <div className="text-center text-pl-muted text-sm py-12">
+                  暂无历史记录
+                </div>
+              )}
+              {history.map((item, i) => (
+                <div
+                  key={item.id || i}
+                  onClick={() => handleLoad(item)}
+                  className="
+                    px-4 py-3 rounded-xl bg-pl-bg border border-pl-border
+                    hover:border-indigo-500/30 hover:bg-white/[0.02]
+                    cursor-pointer transition-all group
+                  "
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-pl-muted">{formatTime(item.savedAt)}</span>
+                    <button
+                      onClick={(e) => handleDelete(item.id, e)}
+                      className="
+                        opacity-0 group-hover:opacity-100 text-xs text-red-400/60 hover:text-red-400
+                        transition-opacity px-1.5 py-0.5 rounded
+                      "
+                    >
+                      删除
+                    </button>
+                  </div>
+                  <div className="text-sm text-pl-text truncate">
+                    {item.title || item.preview || '未命名项目'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      );
+    }
 
-## 海报类型判断
-（类型、信息密度、判断理由）
+    /* ─── Data Preview ─── */
+    function DataPreview({ visible }) {
+      const [data, setData] = useState(null);
 
-## 视觉分析
-（构图、主视觉、色彩、材质、装饰元素、创意亮点）
+      useEffect(() => {
+        if (visible && window.PipelineStore) {
+          setData(window.PipelineStore.getProject());
+        }
+      }, [visible]);
 
-## 文案容量判断
-（文案量级、建议文字占比、承载能力、匹配结果）
+      if (!visible) return null;
 
-## 生成策略
-（推荐方式、文字处理方式）
+      return (
+        <div className="data-preview border-t border-pl-border bg-pl-surface/80 backdrop-blur-sm px-6 py-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-pl-muted uppercase tracking-wider">📦 项目数据预览</span>
+            <span className="text-xs text-pl-muted/50">PipelineStore.getProject()</span>
+          </div>
+          <pre>{JSON.stringify(data, null, 2) || '{\n  // 暂无数据\n}'}</pre>
+        </div>
+      );
+    }
 
-## 横版 A4 Prompt
-（纯英文 prompt，适配 297:210）
+    /* ─── Mobile Top Bar ─── */
+    function MobileTopBar({ steps, currentStep, completedSteps, onStepClick }) {
+      return (
+        <div className="mobile-topbar items-center gap-1 px-2 py-2 bg-pl-surface border-b border-pl-border overflow-x-auto">
+          {steps.map(step => {
+            const active = currentStep === step.num;
+            const done = completedSteps[step.num - 1];
+            return (
+              <button
+                key={step.num}
+                onClick={() => onStepClick(step.num)}
+                className={`
+                  flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm
+                  transition-all duration-200
+                  ${done
+                    ? 'bg-gradient-to-br from-indigo-500 to-purple-500 text-white'
+                    : active
+                      ? 'border-2 bg-white/5'
+                      : 'border border-pl-border text-pl-muted'
+                  }
+                `}
+                style={active ? { borderColor: step.color, color: step.color } : {}}
+                title={step.name}
+              >
+                {done ? '✓' : step.icon}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
 
-## 16:9 投屏 Prompt
-（纯英文 prompt，适配 16:9）
+    /* ─── Main App ─── */
+    function App() {
+      const [currentStep, setCurrentStep] = useState(1);
+      const [showSettings, setShowSettings] = useState(false);
+      const [showHistory, setShowHistory] = useState(false);
+      const [showDataPreview, setShowDataPreview] = useState(false);
+      const [stepStatus, setStepStatus] = useState([false, false, false, false, false]);
+      const iframeRef = useRef(null);
 
-## 风格 Prompt
-（风格关键词）
+      useEffect(() => {
+        if (window.PipelineStore) {
+          const project = window.PipelineStore.getProject();
+          if (project && project.stepStatus) {
+            setStepStatus(project.stepStatus);
+          }
+        }
+      }, []);
 
-## 负面 Prompt
-（排除项）`;
+      useEffect(() => {
+        const handler = (event) => {
+          const msg = event.data;
+          if (msg && msg.type === 'skill-complete' && msg.skill >= 1 && msg.skill <= 5) {
+            setStepStatus(prev => {
+              const next = [...prev];
+              next[msg.skill - 1] = true;
+              if (window.PipelineStore) {
+                window.PipelineStore.setProject({ stepStatus: next });
+              }
+              return next;
+            });
+            if (msg.data && window.PipelineStore) {
+              window.PipelineStore.setProject({ [`skill${msg.skill}Data`]: msg.data });
+            }
+          }
+        };
+        window.addEventListener('message', handler);
+        return () => window.removeEventListener('message', handler);
+      }, []);
 
-async function callAPI(messages) {
-  const base = $('#apiBase').value.trim();
-  const key = $('#apiKey').value.trim();
-  const model = $('#apiModel').value.trim();
-  if (!base || !key) { toast('请先配置 API'); return null; }
-  try {
-    const res = await fetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({ model, messages, max_tokens: 4096, temperature: 0.7 })
-    });
-    if (!res.ok) { const e = await res.text(); throw new Error(`API ${res.status}: ${e}`); }
-    const data = await res.json();
-    return data.choices[0].message.content;
-  } catch (err) { toast('API 调用失败: ' + err.message); return null; }
-}
+      const handleStepClick = useCallback((num) => {
+        setCurrentStep(num);
+      }, []);
 
-function readFileAsBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result); // data:image/...;base64,...
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
+      const handlePrev = useCallback(() => {
+        setCurrentStep(prev => Math.max(1, prev - 1));
+      }, []);
 
-async function buildMessages(goalOverride, sectionHint) {
-  const goal = goalOverride || $('#userGoal').value || '氛围感海报';
-  const posterType = $('#posterType').value;
-  const sizeNeed = $('#sizeNeed').value;
-  const typeMap = { atmosphere_screen:'氛围感投屏', weekly_broadcast:'每周播报', interactive_topic:'互动话题', other:'其他' };
-  const sizeMap = { both:'需要横版 A4 和 16:9 两个尺寸', a4:'仅需横版 A4', '169':'仅需 16:9' };
+      const handleNext = useCallback(() => {
+        setCurrentStep(prev => Math.min(5, prev + 1));
+      }, []);
 
-  let userText = `海报类型：${typeMap[posterType]}\n尺寸需求：${sizeMap[sizeNeed]}\n需求：${goal}`;
-  if (sectionHint) userText += `\n\n请重点重新生成以下部分：${sectionHint}`;
+      const handleHistoryLoad = useCallback(() => {
+        if (window.PipelineStore) {
+          const project = window.PipelineStore.getProject();
+          if (project && project.stepStatus) {
+            setStepStatus(project.stepStatus);
+          }
+        }
+      }, []);
 
-  const content = [{ type: 'text', text: userText }];
-  for (const f of uploadedFiles) {
-    const dataUrl = await readFileAsBase64(f);
-    content.push({ type: 'image_url', image_url: { url: dataUrl } });
-  }
+      const activeStep = STEPS[currentStep - 1];
 
-  return [
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content }
-  ];
-}
+      return (
+        <div className="flex h-screen bg-pl-bg">
+          {/* ── Desktop Sidebar ── */}
+          <aside className="desktop-sidebar flex-shrink-0 w-64 bg-pl-surface border-r border-pl-border flex flex-col">
+            <div className="px-5 py-5 border-b border-pl-border">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-lg font-bold shadow-lg shadow-purple-500/20">
+                  P
+                </div>
+                <div>
+                  <div className="text-sm font-bold tracking-tight">Prompt Lab</div>
+                  <div className="text-[10px] text-pl-muted">AI Poster Pipeline</div>
+                </div>
+              </div>
+            </div>
 
-async function generate(goalOverride, sectionHint) {
-  loading.classList.add('show');
-  results.classList.remove('show');
-  genBtn.disabled = true;
+            <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+              <div className="px-3 mb-3">
+                <span className="text-[10px] font-semibold text-pl-muted/60 uppercase tracking-widest">工作流</span>
+              </div>
+              {STEPS.map(step => (
+                <StepItem
+                  key={step.num}
+                  step={step}
+                  active={currentStep === step.num}
+                  completed={stepStatus[step.num - 1]}
+                  onClick={handleStepClick}
+                />
+              ))}
+            </nav>
 
-  const messages = await buildMessages(goalOverride, sectionHint);
-  const raw = await callAPI(messages);
+            <div className="px-4 py-3 border-t border-pl-border text-[10px] text-pl-muted/40 text-center">
+              v1.0 — Powered by AI
+            </div>
+          </aside>
 
-  loading.classList.remove('show');
-  genBtn.disabled = false;
-  if (!raw) return;
+          {/* ── Mobile Top Bar ── */}
+          <MobileTopBar
+            steps={STEPS}
+            currentStep={currentStep}
+            completedSteps={stepStatus}
+            onStepClick={handleStepClick}
+          />
 
-  parseAndDisplay(raw);
-  results.classList.add('show');
-  toast('分析完成');
-}
+          {/* ── Main Content Area ── */}
+          <main className="flex-1 flex flex-col min-w-0">
+            {/* Top Bar */}
+            <header className="flex items-center justify-between px-6 py-3 bg-pl-surface/50 backdrop-blur-sm border-b border-pl-border flex-shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
+                  style={{ background: activeStep.color + '20', color: activeStep.color }}
+                >
+                  {activeStep.icon}
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-sm font-semibold truncate">
+                    {activeStep.name}
+                  </h1>
+                  <p className="text-xs text-pl-muted truncate">{activeStep.desc}</p>
+                </div>
+              </div>
 
-genBtn.addEventListener('click', () => generate());
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => setShowHistory(true)}
+                  className="
+                    px-3 py-1.5 rounded-lg text-xs font-medium text-pl-muted
+                    hover:text-white hover:bg-white/5 border border-pl-border
+                    transition-colors flex items-center gap-1.5
+                  "
+                >
+                  <span>📋</span>
+                  <span className="hidden sm:inline">历史</span>
+                </button>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="
+                    px-3 py-1.5 rounded-lg text-xs font-medium text-pl-muted
+                    hover:text-white hover:bg-white/5 border border-pl-border
+                    transition-colors flex items-center gap-1.5
+                  "
+                >
+                  <span>⚙️</span>
+                  <span className="hidden sm:inline">设置</span>
+                </button>
+              </div>
+            </header>
 
-function parseAndDisplay(raw) {
-  const sections = {
-    type: extractSection(raw, '海报类型判断', '视觉分析'),
-    visual: extractSection(raw, '视觉分析', '文字视觉解析'),
-    typo: extractSection(raw, '文字视觉解析', '文案容量判断'),
-    copy: extractSection(raw, '文案容量判断', '流程路由'),
-    a4: extractSection(raw, '横版 A4', '16:9'),
-    '169': extractSection(raw, '16:9', '风格 Prompt'),
-    style: extractSection(raw, '风格 Prompt', '负面 Prompt'),
-    neg: extractSection(raw, '负面 Prompt', null)
-  };
+            {/* Iframe Workspace */}
+            <div className="flex-1 relative min-h-0">
+              <iframe
+                ref={iframeRef}
+                src={`skills/skill-${String(currentStep).padStart(2, '0')}/index.html`}
+                className="workspace-iframe"
+                frameBorder="0"
+                title={`Skill ${currentStep}: ${activeStep.name}`}
+                allow="clipboard-write"
+              />
+            </div>
 
-  $('#outType').textContent = sections.type || '（未提取到）';
-  $('#outVisual').textContent = sections.visual || '（未提取到）';
-  $('#outTypo').textContent = sections.typo || '（未提取到）';
-  $('#outCopy').textContent = sections.copy || '（未提取到）';
-  $('#outA4').textContent = sections.a4 || '（未提取到）';
-  $('#out169').textContent = sections['169'] || '（未提取到）';
-  $('#outStyle').textContent = sections.style || '（未提取到）';
-  $('#outNeg').textContent = sections.neg || '（未提取到）';
-  $('#outJson').textContent = '（JSON 会在后续版本中结构化输出）';
-}
+            {/* Bottom Bar */}
+            <footer className="flex items-center justify-between px-6 py-3 bg-pl-surface/50 backdrop-blur-sm border-t border-pl-border flex-shrink-0">
+              <button
+                onClick={handlePrev}
+                disabled={currentStep === 1}
+                className={`
+                  px-4 py-2 rounded-lg text-sm font-medium transition-all
+                  ${currentStep === 1
+                    ? 'text-pl-muted/30 cursor-not-allowed'
+                    : 'text-pl-text hover:bg-white/5 border border-pl-border'
+                  }
+                `}
+              >
+                ← 上一步
+              </button>
 
-function extractSection(text, start, end) {
-  const re = new RegExp(`##\\s*${start}[\\s\\S]*?\\n([\\s\\S]*?)${end ? `(?=##\\s*${end})` : '$'}`, 'i');
-  const m = text.match(re);
-  return m ? m[1].trim() : '';
-}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  {STEPS.map(step => (
+                    <button
+                      key={step.num}
+                      onClick={() => handleStepClick(step.num)}
+                      className={`
+                        w-2 h-2 rounded-full transition-all duration-200
+                        ${stepStatus[step.num - 1]
+                          ? 'bg-green-400'
+                          : currentStep === step.num
+                            ? 'bg-indigo-400 scale-125'
+                            : 'bg-pl-border hover:bg-pl-muted'
+                        }
+                      `}
+                    />
+                  ))}
+                </div>
 
-const SECTION_SYS = {
-  type: `你是海报创意分析专家。只输出"海报类型判断"分析。\n\n输出格式：\n## 海报类型判断\n- 推荐类型：\n- 信息密度：\n- 适合场景：\n- 判断理由：`,
-  copy: `你是海报文案容量分析专家。只输出"文案容量判断"。\n\n输出格式：\n## 文案容量判断\n- 文案长度等级：\n- 建议文字占比：\n- 参考图承载能力：\n- 匹配结果：\n- 风险提示：`,
-  visual: `你是海报视觉分析专家。只输出"视觉分析"。\n\n输出格式：\n## 视觉分析\n- 构图：\n- 主视觉：\n- 色彩与光影：\n- 材质与风格：\n- 装饰元素：\n- 创意亮点：`,
-  typo: `你是字体与排版分析专家。根据参考图分析其文字视觉风格。\n\n输出格式：\n## 文字视觉解析\n- 是否有明显标题：\n- 标题字体类别（如现代无衬线/粗体压缩/圆角亲和/手写感/装饰体等）：\n- 标题字重与层级：\n- 标题颜色与特效（描边/阴影/发光/渐变/色块承托等）：\n- 副标题/正文风格：\n- 文字区域位置（上左/居中/下部/分栏等）：\n- 文字占比估计：\n- 文字与主视觉关系（避让/叠加/穿插/分区）：\n- 可读性承托方式：\n- 给第三步的文字视觉建议：\n\n只输出文字视觉分析，不要输出画面内容分析。`,
-  a4: `你是生图prompt专家。根据参考图和需求，只输出横版A4的英文prompt。\n\n只输出一段纯英文prompt，描述画面条件（构图、主视觉、色彩、光影、材质、留白区），适配297:210比例。\n不要输出中文分析，不要输出其他prompt。`,
-  '169': `你是生图prompt专家。根据参考图和需求，只输出16:9投屏的英文prompt。\n\n只输出一段纯英文prompt，描述画面条件（构图、主视觉、色彩、光影、材质、留白区），适配16:9比例，横向延展更强。\n不要输出中文分析，不要输出其他prompt。`,
-  style: `你是生图prompt专家。根据参考图和需求，只输出风格关键词。\n\n只输出一段纯英文的风格prompt，包含风格类型、质感、光线、色调等关键词。\n不要输出中文分析。`,
-  neg: `你是生图prompt专家。根据参考图和需求，只输出负面prompt。\n\n只输出一段纯英文的负面prompt，排除不需要的元素（如文字、水印、logo等）。\n不要输出中文分析。`
-};
+                <button
+                  onClick={() => setShowDataPreview(prev => !prev)}
+                  className={`
+                    px-3 py-1.5 rounded-lg text-xs font-medium transition-colors
+                    border flex items-center gap-1.5
+                    ${showDataPreview
+                      ? 'border-indigo-500/30 text-indigo-300 bg-indigo-500/10'
+                      : 'border-pl-border text-pl-muted hover:text-white hover:bg-white/5'
+                    }
+                  `}
+                >
+                  <span>{showDataPreview ? '▾' : '▸'}</span>
+                  数据
+                </button>
+              </div>
 
-const SECTION_MAP = {
-  type: { el: 'outType', load: 'loadType' },
-  copy: { el: 'outCopy', load: 'loadCopy' },
-  visual: { el: 'outVisual', load: 'loadVisual' },
-  typo: { el: 'outTypo', load: 'loadTypo' },
-  a4: { el: 'outA4', load: 'loadA4' },
-  '169': { el: 'out169', load: 'load169' },
-  style: { el: 'outStyle', load: 'loadStyle' },
-  neg: { el: 'outNeg', load: 'loadNeg' }
-};
+              <button
+                onClick={handleNext}
+                disabled={currentStep === 5}
+                className={`
+                  px-4 py-2 rounded-lg text-sm font-semibold transition-all
+                  ${currentStep === 5
+                    ? 'text-pl-muted/30 cursor-not-allowed'
+                    : 'text-white bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-400 hover:to-purple-400 shadow-lg shadow-purple-500/20'
+                  }
+                `}
+              >
+                下一步 →
+              </button>
+            </footer>
 
-async function regen(section) {
-  const info = SECTION_MAP[section];
-  if (!info) return;
-  const loadEl = document.getElementById(info.load);
-  const outEl = document.getElementById(info.el);
-  loadEl.classList.add('show');
-  outEl.style.opacity = '0.3';
+            {/* Data Preview Panel */}
+            <DataPreview visible={showDataPreview} />
+          </main>
 
-  const goal = $('#userGoal').value || '氛围感海报';
-  const posterType = $('#posterType').value;
-  const sizeNeed = $('#sizeNeed').value;
-  const typeMap = { atmosphere_screen:'氛围感投屏', weekly_broadcast:'每周播报', interactive_topic:'互动话题', other:'其他' };
-  const sizeMap = { both:'需要横版 A4 和 16:9 两个尺寸', a4:'仅需横版 A4', '169':'仅需 16:9' };
+          {/* ── Slide-out Panels ── */}
+          <SettingsPanel open={showSettings} onClose={() => setShowSettings(false)} />
+          <HistoryPanel open={showHistory} onClose={() => setShowHistory(false)} onLoad={handleHistoryLoad} />
+        </div>
+      );
+    }
 
-  let userText = `海报类型：${typeMap[posterType]}\n尺寸需求：${sizeMap[sizeNeed]}\n需求：${goal}`;
-
-  const content = [{ type: 'text', text: userText }];
-  for (const f of uploadedFiles) {
-    const dataUrl = await readFileAsBase64(f);
-    content.push({ type: 'image_url', image_url: { url: dataUrl } });
-  }
-
-  const messages = [
-    { role: 'system', content: SECTION_SYS[section] },
-    { role: 'user', content }
-  ];
-
-  const raw = await callAPI(messages);
-  loadEl.classList.remove('show');
-  outEl.style.opacity = '1';
-  if (!raw) return;
-
-  // Extract content after heading if present
-  const cleaned = raw.replace(/^##\s*[^\n]*\n/, '').trim();
-  outEl.textContent = cleaned || raw;
-  toast('已重新生成');
-}
-
-function copySection(section) {
-  const el = { a4: '#outA4', '169': '#out169', style: '#outStyle', neg: '#outNeg', json: '#outJson' }[section];
-  const text = el ? document.querySelector(el).textContent : '';
-  navigator.clipboard.writeText(text).then(() => toast('已复制'));
-}
-
-function copyAll() {
-  const parts = [
-    '=== 横版 A4 Prompt ===',
-    $('#outA4').textContent,
-    '',
-    '=== 16:9 投屏 Prompt ===',
-    $('#out169').textContent,
-    '',
-    '=== 风格 Prompt ===',
-    $('#outStyle').textContent,
-    '',
-    '=== 负面 Prompt ===',
-    $('#outNeg').textContent
-  ].join('\n');
-  navigator.clipboard.writeText(parts).then(() => toast('全部 Prompt 已复制'));
-}
-
-function exportJson() {
-  const json = JSON.stringify({
-    a4: $('#outA4').textContent,
-    '169': $('#out169').textContent,
-    style: $('#outStyle').textContent,
-    negative: $('#outNeg').textContent,
-    meta: { posterType: $('#posterType').value, goal: $('#userGoal').value }
-  }, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'prompts.json';
-  a.click();
-  toast('JSON 已下载');
-}
-
-function toast(msg) {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2000);
-}
-</script>
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
 </body>
 </html>

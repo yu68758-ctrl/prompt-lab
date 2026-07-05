@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>参考图反推 — Prompt Lab</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#0a0a14; color:#e0e0e0; min-height:100vh; }
+.container { max-width:960px; margin:0 auto; padding:24px 16px; }
+
+h1 { font-size:20px; font-weight:600; color:#fff; margin-bottom:4px; }
+.subtitle { font-size:13px; color:#888; margin-bottom:24px; }
+
+/* Upload */
+.upload-zone { border:2px dashed #2a2a3e; border-radius:12px; padding:40px 20px; text-align:center; cursor:pointer; transition:border-color .2s,background .2s; margin-bottom:20px; }
+.upload-zone:hover,.upload-zone.dragover { border-color:#6366f1; background:rgba(99,102,241,.05); }
+.upload-zone p { color:#888; font-size:14px; }
+.upload-zone .icon { font-size:36px; margin-bottom:8px; }
+.preview-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px; }
+.preview-item { position:relative; width:120px; height:90px; border-radius:8px; overflow:hidden; border:1px solid #2a2a3e; }
+.preview-item img { width:100%; height:100%; object-fit:cover; }
+.preview-item .remove { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.7); color:#fff; border:none; border-radius:50%; width:20px; height:20px; cursor:pointer; font-size:12px; line-height:20px; text-align:center; }
+
+/* Form */
+.field { margin-bottom:16px; }
+.field label { display:block; font-size:13px; color:#aaa; margin-bottom:6px; font-weight:500; }
+.field select,.field textarea { width:100%; background:#12121c; border:1px solid #2a2a3e; border-radius:8px; padding:10px 12px; color:#e0e0e0; font-size:14px; font-family:inherit; resize:vertical; }
+.field textarea { min-height:80px; }
+.field select:focus,.field textarea:focus { outline:none; border-color:#6366f1; }
+
+/* Button */
+.btn { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; border:none; border-radius:8px; padding:10px 20px; font-size:14px; font-weight:600; cursor:pointer; transition:opacity .2s; }
+.btn:hover { opacity:.85; }
+.btn:disabled { opacity:.4; cursor:not-allowed; }
+.btn-row { display:flex; gap:10px; align-items:center; margin-bottom:24px; }
+.btn-secondary { background:#1e1e2e; color:#aaa; border:1px solid #2a2a3a; }
+
+/* Loading */
+.loading { display:none; text-align:center; padding:40px; }
+.loading.show { display:block; }
+.spinner { width:32px; height:32px; border:3px solid #2a2a3e; border-top-color:#6366f1; border-radius:50%; animation:spin .6s linear infinite; margin:0 auto 12px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.loading p { color:#888; font-size:13px; }
+.section-loading { display:none; text-align:center; padding:20px; font-size:13px; color:#888; }
+.section-loading.show { display:block; }
+.section-loading .spinner { width:20px; height:20px; border-width:2px; margin:0 auto 8px; }
+
+/* Results */
+.results { display:none; }
+.results.show { display:block; }
+.section { background:#12121c; border:1px solid #1e1e2e; border-radius:10px; padding:16px; margin-bottom:12px; }
+.section-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.section-title { font-size:14px; font-weight:600; color:#ccc; }
+.section-actions { display:flex; gap:6px; }
+.btn-sm { background:#1e1e2e; color:#aaa; border:1px solid #2a2a3a; border-radius:6px; padding:4px 10px; font-size:12px; cursor:pointer; transition:all .2s; }
+.btn-sm:hover { background:#2a2a3a; color:#fff; }
+.section-content { font-size:13px; color:#bbb; line-height:1.7; white-space:pre-wrap; font-family:monospace; background:#0a0a14; border-radius:8px; padding:12px; max-height:300px; overflow-y:auto; border:1px solid #1a1a24; }
+
+/* JSON */
+.json-block pre { font-size:12px; color:#aaa; background:#0a0a14; border-radius:8px; padding:12px; max-height:400px; overflow:auto; white-space:pre-wrap; word-break:break-all; border:1px solid #1a1a24; }
+
+/* Toast */
+.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:8px 16px; border-radius:8px; font-size:13px; opacity:0; transition:opacity .3s; pointer-events:none; z-index:999; }
+.toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🎨 参考图反推工具</h1>
+  <p class="subtitle">上传参考图 → 分析创意 → 生成结构化 Prompt</p>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <div class="icon">📷</div>
+    <p>拖拽图片到这里，或点击上传（1~4张）</p>
+    <input type="file" id="fileInput" accept="image/*" multiple hidden>
+  </div>
+  <div class="preview-row" id="previewRow"></div>
+
+  <!-- Requirements -->
+  <div class="field">
+    <label>海报类型</label>
+    <select id="posterType">
+      <option value="atmosphere_screen">氛围感投屏</option>
+      <option value="weekly_broadcast">每周播报</option>
+      <option value="interactive_topic">互动话题</option>
+      <option value="other">其他</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>尺寸需求</label>
+    <select id="sizeNeed">
+      <option value="both">横版 A4 + 16:9</option>
+      <option value="a4">仅横版 A4</option>
+      <option value="169">仅 16:9</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>需求描述 / 文案 / 风格要求</label>
+    <textarea id="userGoal" placeholder="例如：夏日明信片氛围感海报，大标题+副标题，风格偏轻松可爱"></textarea>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" id="genBtn" disabled>✨ 生成分析</button>
+    <button class="btn btn-secondary" id="clearBtn">清空</button>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p>正在分析参考图，请稍候...</p>
+  </div>
+
+  <!-- Results -->
+  <div class="results" id="results">
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">📋 海报类型判断</span>
+        <div class="section-actions"><button class="btn-sm" data-regen="type">重新生成</button></div>
+      </div>
+      <div class="section-loading" id="loadType"><div class="spinner"></div>正在生成...</div>
+      <div class="section-content" id="outType" tabindex="0"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">📊 文案容量分析</span>
+        <div class="section-actions"><button class="btn-sm" data-regen="copy">重新生成</button></div>
+      </div>
+      <div class="section-loading" id="loadCopy"><div class="spinner"></div>正在生成...</div>
+      <div class="section-content" id="outCopy" tabindex="0"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">🎨 视觉分析</span>
+        <div class="section-actions"><button class="btn-sm" data-regen="visual">重新生成</button></div>
+      </div>
+      <div class="section-loading" id="loadVisual"><div class="spinner"></div>正在生成...</div>
+      <div class="section-content" id="outVisual" tabindex="0"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">🔤 文字视觉解析</span>
+        <div class="section-actions"><button class="btn-sm" data-regen="typo">重新生成</button></div>
+      </div>
+      <div class="section-loading" id="loadTypo"><div class="spinner"></div>正在生成...</div>
+      <div class="section-content" id="outTypo" tabindex="0"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">✨ 横版 A4 Prompt</span>
+        <div class="section-actions">
+          <button class="btn-sm" data-regen="a4">重新生成</button>
+          <button class="btn-sm" data-copy="a4">复制</button>
+        </div>
+      </div>
+      <div class="section-loading" id="loadA4"><div class="spinner"></div>正在生成...</div>
+      <div class="section-content" id="outA4" tabindex="0"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">🖥️ 16:9 投屏 Prompt</span>
+        <div class="section-actions">
+          <button class="btn-sm" data-regen="169">重新生成</button>
+          <button class="btn-sm" data-copy="169">复制</button>
+        </div>
+      </div>
+      <div class="section-loading" id="load169"><div class="spinner"></div>正在生成...</div>
+      <div class="section-content" id="out169" tabindex="0"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">🎭 风格 Prompt</span>
+        <div class="section-actions">
+          <button class="btn-sm" data-regen="style">重新生成</button>
+          <button class="btn-sm" data-copy="style">复制</button>
+        </div>
+      </div>
+      <div class="section-loading" id="loadStyle"><div class="spinner"></div>正在生成...</div>
+      <div class="section-content" id="outStyle" tabindex="0"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">🚫 负面 Prompt</span>
+        <div class="section-actions">
+          <button class="btn-sm" data-regen="neg">重新生成</button>
+          <button class="btn-sm" data-copy="neg">复制</button>
+        </div>
+      </div>
+      <div class="section-loading" id="loadNeg"><div class="spinner"></div>正在生成...</div>
+      <div class="section-content" id="outNeg" tabindex="0"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">📦 结构化 JSON</span>
+        <div class="section-actions"><button class="btn-sm" data-copy="json">复制</button></div>
+      </div>
+      <div class="json-block"><pre id="outJson"></pre></div>
+    </div>
+
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn" id="copyAllBtn">📋 复制全部 Prompt</button>
+      <button class="btn btn-secondary" id="exportBtn">💾 导出 JSON</button>
+      <button class="btn btn-secondary" id="sendNextBtn" style="display:none">➡️ 发送到下一步</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ── Config: from parent or localStorage ── */
+let API_CFG = JSON.parse(localStorage.getItem('prompt-lab-api') || 'null') || {
+  apiBase: 'https://token-plan-cn.xiaomimimo.com/v1',
+  apiModel: 'mimo-v2.5',
+  apiKey: '',
+};
+
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'pl-init' && e.data.config) {
+    API_CFG = e.data.config;
+  }
+});
+
+/* ── Utils ── */
+const $ = s => document.querySelector(s);
+const uploadZone = $('#uploadZone');
+const fileInput = $('#fileInput');
+const previewRow = $('#previewRow');
+const genBtn = $('#genBtn');
+const loading = $('#loading');
+const results = $('#results');
+let uploadedFiles = [];
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function postToParent(type, data) {
+  try { window.parent.postMessage({ type, ...data }, '*'); } catch {}
+}
+
+/* ── Upload ── */
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(files) {
+  const max = 4 - uploadedFiles.length;
+  [...files].slice(0, max).forEach(f => {
+    if (!f.type.startsWith('image/')) return;
+    uploadedFiles.push(f);
+    const reader = new FileReader();
+    reader.onload = e => {
+      const div = document.createElement('div');
+      div.className = 'preview-item';
+      div.innerHTML = `<img src="${e.target.result}"><button class="remove" data-idx="${uploadedFiles.length-1}">×</button>`;
+      previewRow.appendChild(div);
+    };
+    reader.readAsDataURL(f);
+  });
+  genBtn.disabled = uploadedFiles.length === 0;
+}
+
+previewRow.addEventListener('click', e => {
+  const btn = e.target.closest('.remove');
+  if (!btn) return;
+  const idx = parseInt(btn.dataset.idx);
+  uploadedFiles.splice(idx, 1);
+  // Rebuild previews
+  previewRow.innerHTML = '';
+  uploadedFiles.forEach((f, i) => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const div = document.createElement('div');
+      div.className = 'preview-item';
+      div.innerHTML = `<img src="${ev.target.result}"><button class="remove" data-idx="${i}">×</button>`;
+      previewRow.appendChild(div);
+    };
+    reader.readAsDataURL(f);
+  });
+  genBtn.disabled = uploadedFiles.length === 0;
+});
+
+$('#clearBtn').addEventListener('click', () => {
+  uploadedFiles = [];
+  previewRow.innerHTML = '';
+  results.classList.remove('show');
+  genBtn.disabled = true;
+  fileInput.value = '';
+});
+
+/* ── API Call ── */
+async function callAPI(messages) {
+  const { apiBase, apiKey, apiModel } = API_CFG;
+  if (!apiBase || !apiKey) { toast('请先配置 API'); return null; }
+  try {
+    const res = await fetch(`${apiBase}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: apiModel, messages, max_tokens: 4096, temperature: 0.7 }),
+    });
+    if (!res.ok) { const e = await res.text(); throw new Error(`API ${res.status}: ${e.slice(0,300)}`); }
+    const data = await res.json();
+    return data.choices[0].message.content;
+  } catch (err) { toast('API 调用失败: ' + err.message); return null; }
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ── System Prompts ── */
+const SYSTEM_PROMPT = `你是一个面向海报生产流程的参考图反推与创意分析技能。
+
+核心规则：
+1. 不得改写用户文案，只能做容量和适配判断
+2. 默认不在生图 prompt 中生成真实文字
+3. 先判断海报类型，再反推 prompt
+4. 必须输出双尺寸 prompt（横版 A4 + 16:9）
+5. 提炼参考图创意逻辑，不是表面风格词
+6. 输出中文说明 + 可用 prompt
+
+输出格式要求（严格按以下结构，用 markdown 标题分隔）：
+
+## 海报类型判断
+（类型、信息密度、判断理由）
+
+## 视觉分析
+（构图、主视觉、色彩、材质、装饰元素、创意亮点）
+
+## 文案容量判断
+（文案量级、建议文字占比、承载能力、匹配结果）
+
+## 生成策略
+（推荐方式、文字处理方式）
+
+## 横版 A4 Prompt
+（纯英文 prompt，适配 297:210）
+
+## 16:9 投屏 Prompt
+（纯英文 prompt，适配 16:9）
+
+## 风格 Prompt
+（风格关键词）
+
+## 负面 Prompt
+（排除项）`;
+
+const SECTION_SYS = {
+  type: `你是海报创意分析专家。只输出"海报类型判断"分析。\n\n输出格式：\n## 海报类型判断\n- 推荐类型：\n- 信息密度：\n- 适合场景：\n- 判断理由：`,
+  copy: `你是海报文案容量分析专家。只输出"文案容量判断"。\n\n输出格式：\n## 文案容量判断\n- 文案长度等级：\n- 建议文字占比：\n- 参考图承载能力：\n- 匹配结果：\n- 风险提示：`,
+  visual: `你是海报视觉分析专家。只输出"视觉分析"。\n\n输出格式：\n## 视觉分析\n- 构图：\n- 主视觉：\n- 色彩与光影：\n- 材质与风格：\n- 装饰元素：\n- 创意亮点：`,
+  typo: `你是字体与排版分析专家。根据参考图分析其文字视觉风格。\n\n输出格式：\n## 文字视觉解析\n- 是否有明显标题：\n- 标题字体类别：\n- 标题字重与层级：\n- 标题颜色与特效：\n- 副标题/正文风格：\n- 文字区域位置：\n- 文字占比估计：\n- 文字与主视觉关系：\n- 可读性承托方式：\n- 给第三步的文字视觉建议：\n\n只输出文字视觉分析，不要输出画面内容分析。`,
+  a4: `你是生图prompt专家。根据参考图和需求，只输出横版A4的英文prompt。\n\n只输出一段纯英文prompt，描述画面条件（构图、主视觉、色彩、光影、材质、留白区），适配297:210比例。\n不要输出中文分析，不要输出其他prompt。`,
+  '169': `你是生图prompt专家。根据参考图和需求，只输出16:9投屏的英文prompt。\n\n只输出一段纯英文prompt，描述画面条件（构图、主视觉、色彩、光影、材质、留白区），适配16:9比例，横向延展更强。\n不要输出中文分析，不要输出其他prompt。`,
+  style: `你是生图prompt专家。根据参考图和需求，只输出风格关键词。\n\n只输出一段纯英文的风格prompt，包含风格类型、质感、光线、色调等关键词。\n不要输出中文分析。`,
+  neg: `你是生图prompt专家。根据参考图和需求，只输出负面prompt。\n\n只输出一段纯英文的负面prompt，排除不需要的元素（如文字、水印、logo等）。\n不要输出中文分析。`,
+};
+
+/* ── Generate ── */
+async function buildMessages(goalOverride, sectionHint) {
+  const goal = goalOverride || $('#userGoal').value || '氛围感海报';
+  const posterType = $('#posterType').value;
+  const sizeNeed = $('#sizeNeed').value;
+  const typeMap = { atmosphere_screen:'氛围感投屏', weekly_broadcast:'每周播报', interactive_topic:'互动话题', other:'其他' };
+  const sizeMap = { both:'需要横版 A4 和 16:9 两个尺寸', a4:'仅需横版 A4', '169':'仅需 16:9' };
+
+  let userText = `海报类型：${typeMap[posterType]}\n尺寸需求：${sizeMap[sizeNeed]}\n需求：${goal}`;
+  if (sectionHint) userText += `\n\n请重点重新生成以下部分：${sectionHint}`;
+
+  const content = [{ type: 'text', text: userText }];
+  for (const f of uploadedFiles) {
+    const dataUrl = await readFileAsBase64(f);
+    content.push({ type: 'image_url', image_url: { url: dataUrl } });
+  }
+
+  return [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content },
+  ];
+}
+
+async function generate(goalOverride, sectionHint) {
+  loading.classList.add('show');
+  results.classList.remove('show');
+  genBtn.disabled = true;
+
+  const messages = await buildMessages(goalOverride, sectionHint);
+  const raw = await callAPI(messages);
+
+  loading.classList.remove('show');
+  genBtn.disabled = false;
+  if (!raw) return;
+
+  parseAndDisplay(raw);
+  results.classList.add('show');
+  toast('分析完成');
+  postToParent('pl-complete', { stepId: 'skill-01' });
+}
+
+genBtn.addEventListener('click', () => generate());
+
+/* ── Parse & Display ── */
+function extractSection(text, start, end) {
+  const re = new RegExp(`##\\s*${start}[\\s\\S]*?\\n([\\s\\S]*?)${end ? `(?=##\\s*${end})` : '$'}`, 'i');
+  const m = text.match(re);
+  return m ? m[1].trim() : '';
+}
+
+function parseAndDisplay(raw) {
+  const s = {
+    type: extractSection(raw, '海报类型判断', '视觉分析'),
+    visual: extractSection(raw, '视觉分析', '文字视觉解析'),
+    typo: extractSection(raw, '文字视觉解析', '文案容量判断'),
+    copy: extractSection(raw, '文案容量判断', '生成策略'),
+    a4: extractSection(raw, '横版 A4', '16:9'),
+    '169': extractSection(raw, '16:9', '风格 Prompt'),
+    style: extractSection(raw, '风格 Prompt', '负面 Prompt'),
+    neg: extractSection(raw, '负面 Prompt', null),
+  };
+
+  $('#outType').textContent = s.type || '（未提取到）';
+  $('#outVisual').textContent = s.visual || '（未提取到）';
+  $('#outTypo').textContent = s.typo || '（未提取到）';
+  $('#outCopy').textContent = s.copy || '（未提取到）';
+  $('#outA4').textContent = s.a4 || '（未提取到）';
+  $('#out169').textContent = s['169'] || '（未提取到）';
+  $('#outStyle').textContent = s.style || '（未提取到）';
+  $('#outNeg').textContent = s.neg || '（未提取到）';
+
+  // Structured JSON
+  const json = {
+    posterType: $('#posterType').value,
+    sizeNeed: $('#sizeNeed').value,
+    prompt_a4: s.a4 || '',
+    prompt_169: s['169'] || '',
+    style: s.style || '',
+    negative: s.neg || '',
+    visualAnalysis: s.visual || '',
+  };
+  $('#outJson').textContent = JSON.stringify(json, null, 2);
+}
+
+/* ── Re-generate single section ── */
+const SECTION_MAP = {
+  type: { el:'outType', load:'loadType' },
+  copy: { el:'outCopy', load:'loadCopy' },
+  visual: { el:'outVisual', load:'loadVisual' },
+  typo: { el:'outTypo', load:'loadTypo' },
+  a4: { el:'outA4', load:'loadA4' },
+  '169': { el:'out169', load:'load169' },
+  style: { el:'outStyle', load:'loadStyle' },
+  neg: { el:'outNeg', load:'loadNeg' },
+};
+
+document.querySelectorAll('[data-regen]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const section = btn.dataset.regen;
+    const info = SECTION_MAP[section];
+    if (!info) return;
+    const loadEl = document.getElementById(info.load);
+    const outEl = document.getElementById(info.el);
+    loadEl.classList.add('show');
+    outEl.style.opacity = '0.3';
+
+    const goal = $('#userGoal').value || '氛围感海报';
+    const posterType = $('#posterType').value;
+    const sizeNeed = $('#sizeNeed').value;
+    const typeMap = { atmosphere_screen:'氛围感投屏', weekly_broadcast:'每周播报', interactive_topic:'互动话题', other:'其他' };
+    const sizeMap = { both:'需要横版 A4 和 16:9 两个尺寸', a4:'仅需横版 A4', '169':'仅需 16:9' };
+
+    let userText = `海报类型：${typeMap[posterType]}\n尺寸需求：${sizeMap[sizeNeed]}\n需求：${goal}`;
+
+    const content = [{ type: 'text', text: userText }];
+    for (const f of uploadedFiles) {
+      const dataUrl = await readFileAsBase64(f);
+      content.push({ type: 'image_url', image_url: { url: dataUrl } });
+    }
+
+    const messages = [
+      { role: 'system', content: SECTION_SYS[section] },
+      { role: 'user', content },
+    ];
+
+    const raw = await callAPI(messages);
+    loadEl.classList.remove('show');
+    outEl.style.opacity = '1';
+    if (!raw) return;
+
+    const cleaned = raw.replace(/^##\s*[^\n]*\n/, '').trim();
+    outEl.textContent = cleaned || raw;
+    toast('已重新生成');
+  });
+});
+
+/* ── Copy ── */
+document.querySelectorAll('[data-copy]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const section = btn.dataset.copy;
+    const elMap = { a4:'#outA4', '169':'#out169', style:'#outStyle', neg:'#outNeg', json:'#outJson' };
+    const el = $(elMap[section]);
+    if (el) {
+      navigator.clipboard.writeText(el.textContent).then(() => toast('已复制'));
+    }
+  });
+});
+
+$('#copyAllBtn').addEventListener('click', () => {
+  const parts = [
+    '=== 横版 A4 Prompt ===', $('#outA4').textContent, '',
+    '=== 16:9 投屏 Prompt ===', $('#out169').textContent, '',
+    '=== 风格 Prompt ===', $('#outStyle').textContent, '',
+    '=== 负面 Prompt ===', $('#outNeg').textContent,
+  ].join('\n');
+  navigator.clipboard.writeText(parts).then(() => toast('全部 Prompt 已复制'));
+});
+
+$('#exportBtn').addEventListener('click', () => {
+  const json = {
+    a4: $('#outA4').textContent,
+    '169': $('#out169').textContent,
+    style: $('#outStyle').textContent,
+    negative: $('#outNeg').textContent,
+  };
+  const blob = new Blob([JSON.stringify(json, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'prompt-analysis.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('JSON 已导出');
+});
+
+$('#sendNextBtn').addEventListener('click', () => {
+  const data = {
+    a4: $('#outA4').textContent,
+    '169': $('#out169').textContent,
+    style: $('#outStyle').textContent,
+    negative: $('#outNeg').textContent,
+    visualAnalysis: $('#outVisual').textContent,
+  };
+  // Save to parent store
+  try {
+    const store = JSON.parse(localStorage.getItem('pl-store') || '{}');
+    store['skill-01'] = data;
+    localStorage.setItem('pl-store', JSON.stringify(store));
+  } catch {}
+  postToParent('pl-navigate', { step: 1 });
+  toast('已发送到下一步');
+});
+
+/* ── Check if we're embedded ── */
+if (window.parent !== window) {
+  $('#sendNextBtn').style.display = '';
+}
+
+/* ── Restore from store ── */
+try {
+  const store = JSON.parse(localStorage.getItem('pl-store') || '{}');
+  if (store['skill-01']) {
+    const d = store['skill-01'];
+    if (d.a4) $('#outA4').textContent = d.a4;
+    if (d['169']) $('#out169').textContent = d['169'];
+    if (d.style) $('#outStyle').textContent = d.style;
+    if (d.negative) $('#outNeg').textContent = d.negative;
+    if (d.visualAnalysis) $('#outVisual').textContent = d.visualAnalysis;
+    if (d.a4 || d['169']) results.classList.add('show');
+  }
+} catch {}
+</script>
+</body>
+</html>
